@@ -1,0 +1,137 @@
+import { useState } from 'react'
+import { IntersectionMap } from './IntersectionMap'
+import { Readiness } from './Readiness'
+import { coherentStatus, directions, directionNames, eventNames, localTime, modeNames, phaseNames, signalNames, supportedGeometry, type Direction } from './traffic'
+import { useJournal, useMonitor, useReadiness, type Connection } from './useMonitor'
+import type { SessionView } from './types/SessionView'
+import { SimulationWorkspace, TrafficMetrics } from './SimulationWorkspace'
+import { useTraffic } from './useTraffic'
+import { useControl } from './useControl'
+import { ControlPanel } from './ControlPanel'
+import { MapZoom } from './MapZoom'
+import { SigapLogo } from './SigapLogo'
+
+const connectionLabels: Record<Connection, string> = {
+  loading: 'Menghubungkan', live: 'Terhubung ke ATCS', unavailable: 'Status tidak tersedia', stale: 'Data tidak mutakhir', paused: 'Pemantauan dijeda',
+}
+
+export function Monitor({ session, onLogout, signingOut, logoutError }: {
+  session: SessionView; onLogout: () => void; signingOut: boolean; logoutError: string | null
+}) {
+  const [revision, setRevision] = useState(0)
+  const [workspace, setWorkspace] = useState<'atcs' | 'sigap' | 'simulation'>('atcs')
+  const [zoom, setZoom] = useState(1)
+  const [selected, setSelected] = useState<Direction>('U')
+  const [routes, setRoutes] = useState(true)
+  const [eventFilter, setEventFilter] = useState<'all' | 'phase' | 'incident'>('all')
+  const [expandedHistory, setExpandedHistory] = useState(false)
+  const { snapshot, checking } = useReadiness(revision)
+  const config = snapshot.configuration.state === 'ready' && supportedGeometry(snapshot.configuration.data) ? snapshot.configuration.data : null
+  const monitor = useMonitor(config?.intersection_id, revision)
+  const { journal, state: journalState } = useJournal(config?.intersection_id, monitor.runId, revision)
+  const data = monitor.status.state === 'ready' ? monitor.status.data : null
+  const verified = monitor.connection === 'live' && data && config && coherentStatus(data, config.intersection_id) ? data : null
+  const connection = config ? monitor.connection : snapshot.configuration.state === 'loading' ? 'loading' : 'unavailable'
+  const approach = config?.approaches.find(a => a.code === selected)
+  const traffic = useTraffic('atcs_synthetic', config?.intersection_id, true, session.csrf_token)
+  const mayControl = session.operator.permissions.includes('control:operate')
+  const control = useControl(config?.intersection_id, session.csrf_token, mayControl)
+  const trafficFrame = verified && traffic.data?.run_id === verified.run_id ? traffic.data : null
+  // Lamps and vehicles share one server snapshot whenever the traffic feed is available.
+  const live = verified && trafficFrame ? { ...verified, signals: trafficFrame.signals, phase: trafficFrame.phase,
+    active_approach: trafficFrame.active_approach, remaining_seconds: trafficFrame.remaining_seconds,
+    conflict_area: { ...verified.conflict_area!, state: trafficFrame.conflict } } : verified
+  const signals = live?.signals ?? null
+  const vehicles = live && traffic.data?.run_id === live.run_id ? traffic.data.vehicles : []
+  const selectedSignal = signals?.[selected] ?? 'unknown'
+  const filtered = [...journal.events].reverse().filter(event => eventFilter === 'all'
+    || (eventFilter === 'phase' ? event.event_type === 'phase_changed' : ['fault', 'recovered', 'clearance_held', 'service_stopped'].includes(event.event_type)))
+  const visibleEvents = expandedHistory ? filtered : filtered.slice(0, 6)
+  const phaseText = live?.phase ? phaseNames[live.phase] : 'Belum diketahui'
+
+  return <>
+    <a className="skip-link" href="#content">Lewati ke isi</a>
+    <header className="app-header">
+      <a className="brand" href="#content" aria-label="SIGAP — monitor persimpangan"><SigapLogo /></a>
+      <span className="header-context">Ruang kendali persimpangan</span>
+      <nav aria-label="Navigasi monitor"><a href="#history">Riwayat</a><a href="#services" onClick={() => { const details = document.querySelector<HTMLDetailsElement>('#services'); if (details) details.open = true }}>Layanan</a></nav>
+      <span className="environment-tag">Prototipe lokal</span>
+      <details className="operator-menu">
+        <summary><span className="operator-avatar" aria-hidden="true">{session.operator.display_name.slice(0, 1).toUpperCase()}</span><span>{session.operator.display_name}<small>Operator pemantauan</small></span><span aria-hidden="true">⌄</span></summary>
+        <div className="operator-popover"><strong>{session.operator.username}</strong><p>Akses pemantauan simpang</p><p>Sesi sampai {localTime(session.expires_at)} WIB</p><button onClick={onLogout} disabled={signingOut}>{signingOut ? 'Mengakhiri sesi…' : 'Keluar dari SIGAP'}</button></div>
+      </details>
+    </header>
+    <main id="content">
+      {logoutError && <p className="connection-note" role="alert">{logoutError}</p>}
+      <div className="page-heading">
+        <div><p className="eyebrow">PEMANTAUAN / KIRCON, BANDUNG</p><h1>Monitor persimpangan</h1>
+          <p className="site-name">{config?.name ?? (snapshot.configuration.state === 'loading' ? 'Memuat identitas persimpangan…' : 'Identitas persimpangan tidak tersedia')}</p></div>
+        <div className="connection-tools">
+          <span className={`connection connection--${connection}`} role="status"><span aria-hidden="true" />{connectionLabels[connection]}</span>
+          <button className="refresh-button" onClick={() => setRevision(value => value + 1)} disabled={checking}><span aria-hidden="true">↻</span> {checking ? 'Memeriksa…' : 'Periksa ulang'}</button>
+        </div>
+      </div>
+      <div className="workspace-switch" role="group" aria-label="Mode ruang kerja">
+        <button aria-pressed={workspace === 'atcs'} onClick={() => setWorkspace('atcs')}><strong>ATCS</strong><span>Pengendali utama · kendaraan sintetis</span></button>
+        <button aria-pressed={workspace === 'sigap'} onClick={() => setWorkspace('sigap')}><strong>SIGAP</strong><span>Kesiapan sumber &amp; kendali</span></button>
+        <button aria-pressed={workspace === 'simulation'} onClick={() => setWorkspace('simulation')}><strong>Simulasi</strong><span>Percobaan arus &amp; EVP</span></button>
+      </div>
+      {workspace !== 'atcs' && <div className="background-atcs" role="status"><span className="signal-dot" />ATCS utama tetap berjalan · {live?.phase ? `${phaseNames[live.phase]} ${live.active_approach ?? ''} · ${live.remaining_seconds != null ? `${Math.ceil(live.remaining_seconds)} dtk` : 'menunggu konflik'}` : 'status belum terverifikasi'}</div>}
+      {control.status?.fallback_code && <p className="connection-note" role="status"><strong>{control.status.state === 'returning_atcs' ? 'Transisi ke ATCS.' : 'Catatan pengendali.'}</strong> {control.status.reason}</p>}
+      {workspace === 'sigap' && <ControlPanel control={control} mayControl={mayControl} />}
+      <SimulationWorkspace intersection={config?.intersection_id} csrf={session.csrf_token} active={workspace === 'simulation'} />
+      <div hidden={workspace !== 'atcs'}>
+      <div className="simulation-strip"><span className="simulation-mark" aria-hidden="true">A</span><span><strong>{live?.mode ? `${live.controller} · ${modeNames[live.mode]}` : 'Pengendali ATCS'}</strong> · Kendaraan ilustrasi sintetis, bukan CCTV aktual. Belum terhubung ke lampu lapangan.</span><span className="read-only">1× · Terus berjalan</span></div>
+      {connection !== 'live' && <div className={`connection-note${connection === 'loading' ? ' is-loading' : ''}`}>
+        <strong>{connectionLabels[connection]}.</strong> {connection === 'loading' ? 'Menunggu kondisi pengendali.'
+          : connection === 'paused' ? 'Data lampu akan diperiksa kembali saat halaman aktif.'
+          : !config ? 'Konfigurasi simpang belum tersedia atau tidak cocok dengan geometri peta.'
+          : data?.reason ?? 'Lampu dan sisa waktu disembunyikan sampai data baru terverifikasi. Kegagalan koneksi belum membuktikan proses ATCS berhenti.'}
+      </div>}
+      <div className="operator-workspace">
+        <section className="map-panel" aria-labelledby="map-title">
+          <div className="section-toolbar"><div><h2 id="map-title">Situasi simpang</h2><p>Pilih pendekat untuk memeriksa arah pergerakan.</p></div>
+            <div className="map-tools"><MapZoom label="Zoom peta ATCS" value={zoom} onChange={setZoom} /><button className="route-toggle" aria-pressed={routes} onClick={() => setRoutes(value => !value)}><span aria-hidden="true">{routes ? '✓' : '+'}</span> Rute terpilih</button></div></div>
+          <div className="map-canvas traffic-map-scroll">
+            {config ? <div style={{ width: `${zoom*100}%` }}><IntersectionMap selected={selected} onSelect={setSelected} signals={signals} routes={routes} vehicles={vehicles} vehicleRunId={live?.run_id ?? undefined} /></div>
+              : <div className="map-empty"><span aria-hidden="true">＋</span><h3>{snapshot.configuration.state === 'loading' ? 'Menyiapkan peta simpang' : 'Peta belum dapat ditampilkan'}</h3><p>Geometri dan arah dibaca dari konfigurasi simpang.</p></div>}
+          </div>
+          <div className="map-legend"><span><i className="legend-route" />Ruas pintas kiri</span><span><i className="legend-dashed" />Rute pendekat terpilih</span><span><i className="legend-yield" />Beri jalan saat bergabung</span></div>
+          <p className="map-rule">Ruas pintas kiri melewati sisi luar pulau jalan. <strong>Arus lurus dan kanan tetap mengikuti lampu.</strong></p>
+          {live && traffic.data?.run_id === live.run_id ? <TrafficMetrics data={traffic.data} /> : <p className="map-rule">Posisi kendaraan belum tersedia atau tidak mutakhir.</p>}
+        </section>
+        <aside className="operations-panel" aria-label="Panel operasional">
+          <div className="controller-heading"><span className="eyebrow">PENGENDALI AKTIF</span><div><strong>{live?.controller ?? '—'}</strong><span>{live?.mode ? modeNames[live.mode] : 'Belum terverifikasi'}</span></div></div>
+          <section className="phase-block" aria-labelledby="phase-title">
+            <div className="phase-heading"><h2 id="phase-title">Fase saat ini</h2><span className={`phase-tag phase-tag--${live?.phase ?? 'unknown'}`}>{phaseText}</span></div>
+            <p className="active-approach">{live?.active_approach ? `Dari ${directionNames[live.active_approach]}` : live?.phase === 'all_red' ? 'Jeda aman antarfase' : 'Menunggu status ATCS'}</p>
+            <div className="countdown" aria-label="Sisa waktu fase"><strong data-testid="countdown">{live?.remaining_seconds != null ? Math.ceil(live.remaining_seconds).toString().padStart(2, '0') : '—'}</strong><span>detik<br />tersisa</span></div>
+            <p className="phase-description">{live?.clearance_state === 'waiting_conflict' ? 'Menunggu area konflik bebas. Durasi semua merah diperpanjang.' : live?.clearance_state === 'waiting_command' ? 'Semua merah: menunggu keputusan SIGAP. ATCS memantau batas waktu.' : live?.phase === 'all_red' ? 'Seluruh pendekat berhenti selama clearance minimum.' : live?.reason ?? 'Waktu hanya ditampilkan saat data pengendali tersedia.'}</p>
+            <div className="phase-sequence" aria-label="Urutan pendekat waktu tetap">{(config?.fixed_time.sequence ?? directions).map(code => <div key={code} className={live?.active_approach === code ? 'is-active' : ''}><span>{code}</span><small>{config ? `${config.fixed_time.green_seconds[code]} dtk` : '—'}</small></div>)}</div>
+            <p className="cycle-note">{config ? `Siklus nominal ${config.fixed_time.nominal_cycle_seconds} detik · kuning ${config.fixed_time.yellow_seconds} detik` : 'Baseline belum tersedia'}</p>
+          </section>
+          <section className="approach-panel" aria-labelledby="approach-title">
+            <div className="phase-heading"><h2 id="approach-title">Pendekat</h2><span className="small-muted">Klik untuk detail</span></div>
+            <div className="approach-tabs" role="group" aria-label="Pilih arah pendekat">{directions.map(code => <button key={code} aria-label={`Detail ${directionNames[code]}`} aria-pressed={selected === code} className={selected === code ? 'is-selected' : ''} onClick={() => setSelected(code)}><span>{code}</span><i className={`signal-dot signal-dot--${signals?.[code] ?? 'unknown'}`} /><span className="sr-only">{signalNames[signals?.[code] ?? 'unknown']}</span></button>)}</div>
+            <div className="selected-approach"><h3>{directionNames[selected]}</h3><span className={`signal-label signal-label--${selectedSignal}`}>{signalNames[selectedSignal]}</span></div>
+            <p className="approach-road">{approach?.road ?? 'Identitas jalan belum tersedia'}</p>
+            <dl className="lane-details"><div><dt>Lajur luar</dt><dd>{approach ? `Lurus ke ${directionNames[approach.outer.straight]} / kiri ke ${directionNames[approach.outer.left]}` : '—'}</dd></div><div><dt>Lajur dalam</dt><dd>{approach ? `Lurus ke ${directionNames[approach.inner.straight]} / kanan ke ${directionNames[approach.inner.right]}` : '—'}</dd></div></dl>
+            <p className="yield-note"><span aria-hidden="true">▽</span> Kiri lewat ruas pintas; beri jalan saat bergabung.</p>
+          </section>
+          <div className="telemetry-details"><div><span>Area konflik</span><strong>{live?.conflict_area?.source === 'assumed_clear' ? 'Diasumsikan kosong' : live?.conflict_area ? ({ clear: 'Kosong', occupied: 'Terisi', unknown: 'Tidak diketahui' }[live.conflict_area.state]) : 'Belum diketahui'}</strong></div><div><span>Pembaruan terakhir</span><time>{monitor.receivedAt ? `${localTime(monitor.receivedAt)} WIB${live ? '' : ' · terakhir diterima'}` : '—'}</time></div></div>
+        </aside>
+      </div>
+      <section className="history-panel" id="history" aria-labelledby="history-title">
+        <div className="section-toolbar"><div><h2 id="history-title">Riwayat kejadian</h2><p>Sesi ATCS saat ini · {journal.events.length} kejadian tersimpan di tampilan</p></div><label className="history-filter">Tampilkan<select value={eventFilter} onChange={event => { setEventFilter(event.target.value as typeof eventFilter); setExpandedHistory(false) }}><option value="all">Semua kejadian</option><option value="phase">Pergantian fase</option><option value="incident">Gangguan &amp; penahanan</option></select></label></div>
+        {journalState === 'unavailable' && <p className="history-note" role="status">Pembaruan riwayat terputus. Baris yang tersimpan merupakan kejadian sebelumnya.</p>}
+        {journal.truncated && <p className="history-note">Menampilkan maksimal 100 kejadian terbaru. Sebagian riwayat awal tidak tersedia di tampilan.</p>}
+        {visibleEvents.length ? <div className="table-scroll"><table className="event-table"><thead><tr><th scope="col">Waktu (WIB)</th><th scope="col">Kejadian</th><th scope="col">Fase / arah</th><th scope="col">Keterangan pengendali</th></tr></thead><tbody>{visibleEvents.map(event => <tr key={event.event_id}><td><time dateTime={event.occurred_at}>{localTime(event.occurred_at)}</time></td><th scope="row">{eventNames[event.event_type]}</th><td><span className={`event-phase event-phase--${event.phase}`}>{phaseNames[event.phase]}{event.active_approach ? ` · ${event.active_approach}` : ''}</span></td><td>{event.reason}</td></tr>)}</tbody></table></div>
+          : <p className="empty-history">{!monitor.runId ? 'Riwayat akan muncul setelah sesi ATCS terverifikasi.' : journalState === 'loading' ? 'Memuat riwayat sesi…' : journalState === 'unavailable' ? 'Riwayat belum dapat diperbarui.' : 'Belum ada kejadian untuk pilihan ini.'}</p>}
+        {filtered.length > 6 && <div className="history-actions"><button onClick={() => setExpandedHistory(value => !value)}>{expandedHistory ? 'Ringkas riwayat' : `Lihat ${filtered.length} kejadian`}</button></div>}
+      </section>
+      </div>
+      <Readiness snapshot={snapshot} />
+      <footer><span><strong>SIGAP</strong> — Sistem Pengaturan Fase Lampu Adaptif Berbasis CCTV dan Deteksi Kendaraan YOLO.</span><span>Tahap 3 / 4 · Integrasi &amp; fallback</span></footer>
+    </main>
+  </>
+}

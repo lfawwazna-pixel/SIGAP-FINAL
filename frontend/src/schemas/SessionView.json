@@ -1,0 +1,84 @@
+{
+  "$defs": {
+    "OperatorView": {
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "format": "uuid",
+          "title": "Id",
+          "type": "string"
+        },
+        "username": {
+          "maxLength": 80,
+          "minLength": 3,
+          "title": "Username",
+          "type": "string"
+        },
+        "display_name": {
+          "maxLength": 120,
+          "minLength": 1,
+          "title": "Display Name",
+          "type": "string"
+        },
+        "role": {
+          "const": "operator",
+          "default": "operator",
+          "title": "Role",
+          "type": "string"
+        },
+        "permissions": {
+          "items": {
+            "enum": [
+              "monitor:read",
+              "control:operate"
+            ],
+            "type": "string"
+          },
+          "maxItems": 2,
+          "minItems": 1,
+          "title": "Permissions",
+          "type": "array"
+        }
+      },
+      "required": [
+        "id",
+        "username",
+        "display_name",
+        "role",
+        "permissions"
+      ],
+      "title": "OperatorView",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "operator": {
+      "$ref": "#/$defs/OperatorView"
+    },
+    "expires_at": {
+      "format": "date-time",
+      "title": "Expires At",
+      "type": "string"
+    },
+    "remaining_seconds": {
+      "exclusiveMinimum": 0,
+      "maximum": 86400,
+      "title": "Remaining Seconds",
+      "type": "integer"
+    },
+    "csrf_token": {
+      "pattern": "^[a-f0-9]{64}$",
+      "title": "Csrf Token",
+      "type": "string"
+    }
+  },
+  "required": [
+    "operator",
+    "expires_at",
+    "remaining_seconds",
+    "csrf_token"
+  ],
+  "title": "SessionView",
+  "type": "object"
+}

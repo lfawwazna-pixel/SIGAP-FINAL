@@ -1,0 +1,46 @@
+{
+  "schema_version": "1.0",
+  "intersection_id": "SIGAP-KIRCON-01",
+  "name": "Simpang Ibrahim Adjie–Soekarno Hatta",
+  "location": "Kircon, Bandung",
+  "timezone": "Asia/Jakarta",
+  "operating_context": "simulation",
+  "geometry": {
+    "driving_side": "left",
+    "incoming_lanes_per_approach": 2,
+    "outgoing_lanes_per_approach": 2,
+    "median": true,
+    "left_turn_slip_roads": 4,
+    "separating_islands": true,
+    "left_turn_signal_controlled": false,
+    "yield_at_merge": true,
+    "u_turn_allowed": false,
+    "lane_change_in_intersection": false,
+    "block_entry_when_exit_blocked": true,
+    "complete_committed_movement": true,
+    "slip_fork_before_stop_line": true,
+    "slip_merge_after_intersection": true
+  },
+  "approaches": [
+    {"code":"U","road":"Jl. Ibrahim Adjie","side":"Utara","outer":{"left":"T","straight":"S"},"inner":{"straight":"S","right":"B"}},
+    {"code":"T","road":"Jl. Soekarno Hatta","side":"Timur","outer":{"left":"S","straight":"B"},"inner":{"straight":"B","right":"U"}},
+    {"code":"S","road":"Jl. Ibrahim Adjie","side":"Selatan","outer":{"left":"B","straight":"U"},"inner":{"straight":"U","right":"T"}},
+    {"code":"B","road":"Jl. Soekarno Hatta","side":"Barat","outer":{"left":"U","straight":"T"},"inner":{"straight":"T","right":"S"}}
+  ],
+  "fixed_time": {
+    "sequence": ["U","T","S","B"],
+    "green_seconds": {"U":85,"T":150,"S":95,"B":100},
+    "yellow_seconds": 3,
+    "all_red_min_seconds": 2,
+    "nominal_cycle_seconds": 450,
+    "extend_all_red_until_conflict_clear": true
+  },
+  "provenance": {
+    "timing_source_url": "https://jurnal.polban.ac.id/proceeding/article/view/6701/4025",
+    "timing_source_year": 2025,
+    "timing_basis": "Tabel 7 penelitian Polban; bukan konfigurasi ATCS terkini yang dikonfirmasi.",
+    "sequence_basis": "Keputusan desain simulasi U–T–S–B.",
+    "geometry_basis": "Peta yang disepakati pengguna; penyederhanaan, bukan ukuran/rambu lapangan.",
+    "current_field_configuration_verified": false
+  }
+}

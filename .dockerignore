@@ -1,0 +1,15 @@
+.git
+.env
+.env.*
+!.env.example
+.venv
+work
+node_modules
+frontend/node_modules
+frontend/dist
+__pycache__
+**/__pycache__
+.pytest_cache
+models
+*.pt
+*.mp4

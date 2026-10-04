@@ -1,0 +1,369 @@
+{
+  "$defs": {
+    "Approach": {
+      "additionalProperties": false,
+      "properties": {
+        "code": {
+          "enum": [
+            "U",
+            "T",
+            "S",
+            "B"
+          ],
+          "title": "Code",
+          "type": "string"
+        },
+        "road": {
+          "minLength": 1,
+          "title": "Road",
+          "type": "string"
+        },
+        "side": {
+          "minLength": 1,
+          "title": "Side",
+          "type": "string"
+        },
+        "outer": {
+          "$ref": "#/$defs/OuterLane"
+        },
+        "inner": {
+          "$ref": "#/$defs/InnerLane"
+        }
+      },
+      "required": [
+        "code",
+        "road",
+        "side",
+        "outer",
+        "inner"
+      ],
+      "title": "Approach",
+      "type": "object"
+    },
+    "FixedTime": {
+      "additionalProperties": false,
+      "properties": {
+        "sequence": {
+          "items": {
+            "enum": [
+              "U",
+              "T",
+              "S",
+              "B"
+            ],
+            "type": "string"
+          },
+          "maxItems": 4,
+          "minItems": 4,
+          "title": "Sequence",
+          "type": "array"
+        },
+        "green_seconds": {
+          "additionalProperties": {
+            "exclusiveMinimum": 0,
+            "type": "integer"
+          },
+          "propertyNames": {
+            "enum": [
+              "U",
+              "T",
+              "S",
+              "B"
+            ]
+          },
+          "title": "Green Seconds",
+          "type": "object"
+        },
+        "yellow_seconds": {
+          "exclusiveMinimum": 0,
+          "title": "Yellow Seconds",
+          "type": "integer"
+        },
+        "all_red_min_seconds": {
+          "exclusiveMinimum": 0,
+          "title": "All Red Min Seconds",
+          "type": "integer"
+        },
+        "nominal_cycle_seconds": {
+          "exclusiveMinimum": 0,
+          "title": "Nominal Cycle Seconds",
+          "type": "integer"
+        },
+        "extend_all_red_until_conflict_clear": {
+          "const": true,
+          "title": "Extend All Red Until Conflict Clear",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "sequence",
+        "green_seconds",
+        "yellow_seconds",
+        "all_red_min_seconds",
+        "nominal_cycle_seconds",
+        "extend_all_red_until_conflict_clear"
+      ],
+      "title": "FixedTime",
+      "type": "object"
+    },
+    "Geometry": {
+      "additionalProperties": false,
+      "properties": {
+        "driving_side": {
+          "const": "left",
+          "title": "Driving Side",
+          "type": "string"
+        },
+        "incoming_lanes_per_approach": {
+          "const": 2,
+          "title": "Incoming Lanes Per Approach",
+          "type": "integer"
+        },
+        "outgoing_lanes_per_approach": {
+          "const": 2,
+          "title": "Outgoing Lanes Per Approach",
+          "type": "integer"
+        },
+        "median": {
+          "const": true,
+          "title": "Median",
+          "type": "boolean"
+        },
+        "left_turn_slip_roads": {
+          "const": 4,
+          "title": "Left Turn Slip Roads",
+          "type": "integer"
+        },
+        "separating_islands": {
+          "const": true,
+          "title": "Separating Islands",
+          "type": "boolean"
+        },
+        "left_turn_signal_controlled": {
+          "const": false,
+          "title": "Left Turn Signal Controlled",
+          "type": "boolean"
+        },
+        "yield_at_merge": {
+          "const": true,
+          "title": "Yield At Merge",
+          "type": "boolean"
+        },
+        "u_turn_allowed": {
+          "const": false,
+          "title": "U Turn Allowed",
+          "type": "boolean"
+        },
+        "lane_change_in_intersection": {
+          "const": false,
+          "title": "Lane Change In Intersection",
+          "type": "boolean"
+        },
+        "block_entry_when_exit_blocked": {
+          "const": true,
+          "title": "Block Entry When Exit Blocked",
+          "type": "boolean"
+        },
+        "complete_committed_movement": {
+          "const": true,
+          "title": "Complete Committed Movement",
+          "type": "boolean"
+        },
+        "slip_fork_before_stop_line": {
+          "const": true,
+          "title": "Slip Fork Before Stop Line",
+          "type": "boolean"
+        },
+        "slip_merge_after_intersection": {
+          "const": true,
+          "title": "Slip Merge After Intersection",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "driving_side",
+        "incoming_lanes_per_approach",
+        "outgoing_lanes_per_approach",
+        "median",
+        "left_turn_slip_roads",
+        "separating_islands",
+        "left_turn_signal_controlled",
+        "yield_at_merge",
+        "u_turn_allowed",
+        "lane_change_in_intersection",
+        "block_entry_when_exit_blocked",
+        "complete_committed_movement",
+        "slip_fork_before_stop_line",
+        "slip_merge_after_intersection"
+      ],
+      "title": "Geometry",
+      "type": "object"
+    },
+    "InnerLane": {
+      "additionalProperties": false,
+      "properties": {
+        "straight": {
+          "enum": [
+            "U",
+            "T",
+            "S",
+            "B"
+          ],
+          "title": "Straight",
+          "type": "string"
+        },
+        "right": {
+          "enum": [
+            "U",
+            "T",
+            "S",
+            "B"
+          ],
+          "title": "Right",
+          "type": "string"
+        }
+      },
+      "required": [
+        "straight",
+        "right"
+      ],
+      "title": "InnerLane",
+      "type": "object"
+    },
+    "OuterLane": {
+      "additionalProperties": false,
+      "properties": {
+        "left": {
+          "enum": [
+            "U",
+            "T",
+            "S",
+            "B"
+          ],
+          "title": "Left",
+          "type": "string"
+        },
+        "straight": {
+          "enum": [
+            "U",
+            "T",
+            "S",
+            "B"
+          ],
+          "title": "Straight",
+          "type": "string"
+        }
+      },
+      "required": [
+        "left",
+        "straight"
+      ],
+      "title": "OuterLane",
+      "type": "object"
+    },
+    "Provenance": {
+      "additionalProperties": false,
+      "properties": {
+        "timing_source_url": {
+          "title": "Timing Source Url",
+          "type": "string"
+        },
+        "timing_source_year": {
+          "title": "Timing Source Year",
+          "type": "integer"
+        },
+        "timing_basis": {
+          "title": "Timing Basis",
+          "type": "string"
+        },
+        "sequence_basis": {
+          "title": "Sequence Basis",
+          "type": "string"
+        },
+        "geometry_basis": {
+          "title": "Geometry Basis",
+          "type": "string"
+        },
+        "current_field_configuration_verified": {
+          "const": false,
+          "title": "Current Field Configuration Verified",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "timing_source_url",
+        "timing_source_year",
+        "timing_basis",
+        "sequence_basis",
+        "geometry_basis",
+        "current_field_configuration_verified"
+      ],
+      "title": "Provenance",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "schema_version": {
+      "const": "1.0",
+      "title": "Schema Version",
+      "type": "string"
+    },
+    "intersection_id": {
+      "minLength": 1,
+      "title": "Intersection Id",
+      "type": "string"
+    },
+    "name": {
+      "minLength": 1,
+      "title": "Name",
+      "type": "string"
+    },
+    "location": {
+      "title": "Location",
+      "type": "string"
+    },
+    "timezone": {
+      "const": "Asia/Jakarta",
+      "title": "Timezone",
+      "type": "string"
+    },
+    "operating_context": {
+      "const": "simulation",
+      "title": "Operating Context",
+      "type": "string"
+    },
+    "geometry": {
+      "$ref": "#/$defs/Geometry"
+    },
+    "approaches": {
+      "items": {
+        "$ref": "#/$defs/Approach"
+      },
+      "maxItems": 4,
+      "minItems": 4,
+      "title": "Approaches",
+      "type": "array"
+    },
+    "fixed_time": {
+      "$ref": "#/$defs/FixedTime"
+    },
+    "provenance": {
+      "$ref": "#/$defs/Provenance"
+    }
+  },
+  "required": [
+    "schema_version",
+    "intersection_id",
+    "name",
+    "location",
+    "timezone",
+    "operating_context",
+    "geometry",
+    "approaches",
+    "fixed_time",
+    "provenance"
+  ],
+  "title": "IntersectionConfig",
+  "type": "object"
+}

@@ -1,0 +1,326 @@
+{
+  "$defs": {
+    "ControlEvent": {
+      "additionalProperties": false,
+      "properties": {
+        "sequence": {
+          "minimum": 1,
+          "title": "Sequence",
+          "type": "integer"
+        },
+        "occurred_at": {
+          "format": "date-time",
+          "title": "Occurred At",
+          "type": "string"
+        },
+        "code": {
+          "title": "Code",
+          "type": "string"
+        },
+        "message": {
+          "title": "Message",
+          "type": "string"
+        },
+        "request_id": {
+          "anyOf": [
+            {
+              "format": "uuid",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Request Id"
+        }
+      },
+      "required": [
+        "sequence",
+        "occurred_at",
+        "code",
+        "message",
+        "request_id"
+      ],
+      "title": "ControlEvent",
+      "type": "object"
+    },
+    "ControlPolicy": {
+      "additionalProperties": false,
+      "properties": {
+        "heartbeat_timeout_seconds": {
+          "default": 3,
+          "maximum": 30,
+          "minimum": 1,
+          "title": "Heartbeat Timeout Seconds",
+          "type": "number"
+        },
+        "data_timeout_seconds": {
+          "default": 3,
+          "maximum": 30,
+          "minimum": 1,
+          "title": "Data Timeout Seconds",
+          "type": "number"
+        },
+        "plan_wait_seconds": {
+          "default": 8,
+          "maximum": 30,
+          "minimum": 1,
+          "title": "Plan Wait Seconds",
+          "type": "number"
+        },
+        "minimum_green_seconds": {
+          "default": 10,
+          "maximum": 60,
+          "minimum": 1,
+          "title": "Minimum Green Seconds",
+          "type": "number"
+        },
+        "maximum_green_seconds": {
+          "default": 60,
+          "maximum": 180,
+          "minimum": 1,
+          "title": "Maximum Green Seconds",
+          "type": "number"
+        },
+        "maximum_command_ttl_seconds": {
+          "default": 5,
+          "maximum": 10,
+          "minimum": 1,
+          "title": "Maximum Command Ttl Seconds",
+          "type": "number"
+        },
+        "maximum_plan_horizon_seconds": {
+          "default": 180,
+          "maximum": 300,
+          "minimum": 10,
+          "title": "Maximum Plan Horizon Seconds",
+          "type": "number"
+        },
+        "clock_skew_seconds": {
+          "default": 1,
+          "maximum": 2,
+          "minimum": 0,
+          "title": "Clock Skew Seconds",
+          "type": "number"
+        }
+      },
+      "required": [
+        "heartbeat_timeout_seconds",
+        "data_timeout_seconds",
+        "plan_wait_seconds",
+        "minimum_green_seconds",
+        "maximum_green_seconds",
+        "maximum_command_ttl_seconds",
+        "maximum_plan_horizon_seconds",
+        "clock_skew_seconds"
+      ],
+      "title": "ControlPolicy",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "intersection_id": {
+      "title": "Intersection Id",
+      "type": "string"
+    },
+    "atcs_run_id": {
+      "format": "uuid",
+      "title": "Atcs Run Id",
+      "type": "string"
+    },
+    "observed_at": {
+      "format": "date-time",
+      "title": "Observed At",
+      "type": "string"
+    },
+    "available": {
+      "title": "Available",
+      "type": "boolean"
+    },
+    "configured": {
+      "title": "Configured",
+      "type": "boolean"
+    },
+    "allow_test_source": {
+      "title": "Allow Test Source",
+      "type": "boolean"
+    },
+    "state": {
+      "enum": [
+        "fixed_time",
+        "activating",
+        "adaptive",
+        "returning_atcs"
+      ],
+      "title": "State",
+      "type": "string"
+    },
+    "controller": {
+      "enum": [
+        "ATCS",
+        "SIGAP"
+      ],
+      "title": "Controller",
+      "type": "string"
+    },
+    "revision": {
+      "minimum": 0,
+      "title": "Revision",
+      "type": "integer"
+    },
+    "sender_id": {
+      "anyOf": [
+        {
+          "format": "uuid",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "title": "Sender Id"
+    },
+    "source": {
+      "anyOf": [
+        {
+          "enum": [
+            "cctv",
+            "integration_test"
+          ],
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "title": "Source"
+    },
+    "ready": {
+      "title": "Ready",
+      "type": "boolean"
+    },
+    "readiness_reason": {
+      "title": "Readiness Reason",
+      "type": "string"
+    },
+    "activation_required": {
+      "title": "Activation Required",
+      "type": "boolean"
+    },
+    "session_id": {
+      "anyOf": [
+        {
+          "format": "uuid",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "title": "Session Id"
+    },
+    "heartbeat_remaining_seconds": {
+      "anyOf": [
+        {
+          "minimum": 0,
+          "type": "number"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "title": "Heartbeat Remaining Seconds"
+    },
+    "data_remaining_seconds": {
+      "anyOf": [
+        {
+          "minimum": 0,
+          "type": "number"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "title": "Data Remaining Seconds"
+    },
+    "pending_request_id": {
+      "anyOf": [
+        {
+          "format": "uuid",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "title": "Pending Request Id"
+    },
+    "active_request_id": {
+      "anyOf": [
+        {
+          "format": "uuid",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "title": "Active Request Id"
+    },
+    "fallback_code": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "title": "Fallback Code"
+    },
+    "reason": {
+      "title": "Reason",
+      "type": "string"
+    },
+    "policy": {
+      "$ref": "#/$defs/ControlPolicy"
+    },
+    "events": {
+      "items": {
+        "$ref": "#/$defs/ControlEvent"
+      },
+      "maxItems": 100,
+      "title": "Events",
+      "type": "array"
+    }
+  },
+  "required": [
+    "intersection_id",
+    "atcs_run_id",
+    "observed_at",
+    "available",
+    "configured",
+    "allow_test_source",
+    "state",
+    "controller",
+    "revision",
+    "sender_id",
+    "source",
+    "ready",
+    "readiness_reason",
+    "activation_required",
+    "session_id",
+    "heartbeat_remaining_seconds",
+    "data_remaining_seconds",
+    "pending_request_id",
+    "active_request_id",
+    "fallback_code",
+    "reason",
+    "policy",
+    "events"
+  ],
+  "title": "ControlStatus",
+  "type": "object"
+}

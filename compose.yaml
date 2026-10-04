@@ -1,0 +1,74 @@
+name: sigap
+services:
+  db:
+    image: postgres:17.11-bookworm
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-sigap}
+      POSTGRES_USER: ${POSTGRES_USER:-sigap}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Isi POSTGRES_PASSWORD di .env}
+    ports:
+      - "127.0.0.1:${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - sigap_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U \"$$POSTGRES_USER\" -d \"$$POSTGRES_DB\""]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  atcs:
+    build:
+      context: .
+      dockerfile: Dockerfile.python
+    command: ["uvicorn", "atcs_simulator.app.main:app", "--host", "0.0.0.0", "--port", "8001", "--workers", "1"]
+    environment:
+      SIGAP_CONFIG_PATH: /app/configs/intersection.json
+      SIGAP_CONTROL_API_KEY: ${SIGAP_CONTROL_API_KEY:-}
+      ATCS_ENABLE_TEST_SOURCE: "false"
+    ports:
+      - "127.0.0.1:${ATCS_PORT:-8001}:8001"
+    volumes:
+      - ./configs:/app/configs:ro
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8001/health',timeout=2)"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile.python
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-sigap}
+      POSTGRES_USER: ${POSTGRES_USER:-sigap}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Isi POSTGRES_PASSWORD di .env}
+      SIGAP_DB_HOST: db
+      SIGAP_DB_PORT: "5432"
+      SIGAP_CONFIG_PATH: /app/configs/intersection.json
+      SIGAP_ATCS_BASE_URL: http://atcs:8001
+      SIGAP_CONTROL_API_KEY: ${SIGAP_CONTROL_API_KEY:-}
+      SIGAP_SESSION_SECONDS: ${SIGAP_SESSION_SECONDS:-28800}
+      SIGAP_COOKIE_SECURE: ${SIGAP_COOKIE_SECURE:-false}
+      SIGAP_ALLOWED_ORIGINS: '${SIGAP_ALLOWED_ORIGINS:-["http://127.0.0.1:5173","http://localhost:5173"]}'
+    ports:
+      - "127.0.0.1:${BACKEND_PORT:-8000}:8000"
+    volumes:
+      - ./configs:/app/configs:ro
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/api/health/live',timeout=2)"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+
+  frontend:
+    build:
+      context: ./frontend
+    environment:
+      BACKEND_PROXY_TARGET: http://backend:8000
+      VITE_API_BASE_URL: /api
+    ports:
+      - "127.0.0.1:${FRONTEND_PORT:-5173}:5173"
+
+volumes:
+  sigap_pgdata:

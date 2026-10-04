@@ -1,0 +1,91 @@
+{
+  "additionalProperties": false,
+  "properties": {
+    "request_id": {
+      "format": "uuid",
+      "title": "Request Id",
+      "type": "string"
+    },
+    "atcs_run_id": {
+      "format": "uuid",
+      "title": "Atcs Run Id",
+      "type": "string"
+    },
+    "action": {
+      "enum": [
+        "observe",
+        "activate",
+        "heartbeat",
+        "plan",
+        "release"
+      ],
+      "title": "Action",
+      "type": "string"
+    },
+    "outcome": {
+      "enum": [
+        "accepted",
+        "applied",
+        "rejected",
+        "cancelled"
+      ],
+      "title": "Outcome",
+      "type": "string"
+    },
+    "code": {
+      "title": "Code",
+      "type": "string"
+    },
+    "message": {
+      "title": "Message",
+      "type": "string"
+    },
+    "session_id": {
+      "anyOf": [
+        {
+          "format": "uuid",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "title": "Session Id"
+    },
+    "revision": {
+      "minimum": 0,
+      "title": "Revision",
+      "type": "integer"
+    },
+    "received_at": {
+      "format": "date-time",
+      "title": "Received At",
+      "type": "string"
+    },
+    "updated_at": {
+      "format": "date-time",
+      "title": "Updated At",
+      "type": "string"
+    },
+    "duplicate": {
+      "default": false,
+      "title": "Duplicate",
+      "type": "boolean"
+    }
+  },
+  "required": [
+    "request_id",
+    "atcs_run_id",
+    "action",
+    "outcome",
+    "code",
+    "message",
+    "session_id",
+    "revision",
+    "received_at",
+    "updated_at",
+    "duplicate"
+  ],
+  "title": "CommandReceipt",
+  "type": "object"
+}

@@ -1,0 +1,156 @@
+{
+  "$defs": {
+    "Capabilities": {
+      "additionalProperties": false,
+      "properties": {
+        "phase_engine": {
+          "default": "not_hosted",
+          "enum": [
+            "not_implemented",
+            "not_hosted",
+            "running",
+            "faulted",
+            "stopped",
+            "stalled"
+          ],
+          "title": "Phase Engine",
+          "type": "string"
+        },
+        "authentication": {
+          "default": "not_implemented",
+          "enum": [
+            "not_implemented",
+            "available",
+            "unavailable"
+          ],
+          "title": "Authentication",
+          "type": "string"
+        },
+        "override": {
+          "default": "not_implemented",
+          "enum": [
+            "not_implemented",
+            "available",
+            "unavailable"
+          ],
+          "title": "Override",
+          "type": "string"
+        },
+        "ai": {
+          "const": "not_implemented",
+          "default": "not_implemented",
+          "title": "Ai",
+          "type": "string"
+        },
+        "cctv": {
+          "const": "not_configured",
+          "default": "not_configured",
+          "title": "Cctv",
+          "type": "string"
+        }
+      },
+      "required": [
+        "phase_engine",
+        "authentication",
+        "override",
+        "ai",
+        "cctv"
+      ],
+      "title": "Capabilities",
+      "type": "object"
+    },
+    "DatabaseCheck": {
+      "additionalProperties": false,
+      "properties": {
+        "status": {
+          "enum": [
+            "not_configured",
+            "unavailable",
+            "reachable",
+            "not_required"
+          ],
+          "title": "Status",
+          "type": "string"
+        },
+        "schema_status": {
+          "enum": [
+            "current",
+            "missing_or_outdated",
+            "unknown",
+            "not_required"
+          ],
+          "title": "Schema Status",
+          "type": "string"
+        }
+      },
+      "required": [
+        "status",
+        "schema_status"
+      ],
+      "title": "DatabaseCheck",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "service": {
+      "enum": [
+        "backend",
+        "atcs"
+      ],
+      "title": "Service",
+      "type": "string"
+    },
+    "stage": {
+      "default": "2B",
+      "enum": [
+        "2A",
+        "2B",
+        "2D",
+        "2F",
+        "4"
+      ],
+      "title": "Stage",
+      "type": "string"
+    },
+    "liveness": {
+      "const": "alive",
+      "default": "alive",
+      "title": "Liveness",
+      "type": "string"
+    },
+    "foundation_ready": {
+      "title": "Foundation Ready",
+      "type": "boolean"
+    },
+    "checked_at": {
+      "format": "date-time",
+      "title": "Checked At",
+      "type": "string"
+    },
+    "configuration": {
+      "const": "valid",
+      "default": "valid",
+      "title": "Configuration",
+      "type": "string"
+    },
+    "database": {
+      "$ref": "#/$defs/DatabaseCheck"
+    },
+    "capabilities": {
+      "$ref": "#/$defs/Capabilities"
+    }
+  },
+  "required": [
+    "service",
+    "stage",
+    "liveness",
+    "foundation_ready",
+    "checked_at",
+    "configuration",
+    "database",
+    "capabilities"
+  ],
+  "title": "Health",
+  "type": "object"
+}

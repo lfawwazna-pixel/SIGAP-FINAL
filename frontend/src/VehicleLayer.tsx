@@ -1,0 +1,57 @@
+import { useLayoutEffect, useRef } from 'react'
+import { directionNames } from './traffic'
+import type { TrafficView } from './types/TrafficView'
+
+interface Pose { x: number; y: number; heading: number }
+const poseOf = ({ x, y, heading }: Pose): Pose => ({ x, y, heading })
+export function interpolatePose(from: Pose, to: Pose, progress: number): Pose {
+  const turn = (((to.heading - from.heading) % 360 + 540) % 360) - 180
+  return { x: from.x + (to.x-from.x)*progress, y: from.y + (to.y-from.y)*progress, heading: from.heading+turn*progress }
+}
+const transform = (pose: Pose) => `translate(${pose.x} ${pose.y})`
+
+/** Interpolate only SVG user coordinates. Browser zoom changes the common SVG
+ * viewport, never a separate CSS-pixel translation or compositor transition. */
+export function VehicleLayer({ vehicles }: { vehicles: TrafficView['vehicles'] }) {
+  const nodes = useRef(new Map<number, SVGGElement>())
+  const drawn = useRef(new Map<number, Pose>())
+  useLayoutEffect(() => {
+    let frame = 0
+    const start = performance.now()
+    const reduceMotion = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ?? false
+    const movements = vehicles.map(vehicle => {
+      const to = poseOf(vehicle)
+      const previous = drawn.current.get(vehicle.id) || to
+      // Fresh arrivals, reconnections and large jumps snap to the verified sample.
+      const from = reduceMotion || document.hidden || Math.hypot(to.x-previous.x, to.y-previous.y) > 100 ? to : previous
+      return { id: vehicle.id, from, to }
+    })
+    drawn.current = new Map(movements.map(item => [item.id, item.from]))
+    const moving = movements.some(({ from, to }) => from.x !== to.x || from.y !== to.y || from.heading !== to.heading)
+    const draw = (at: number) => {
+      const progress = moving ? Math.min(1, Math.max(0, (at-start)/230)) : 1
+      for (const { id, from, to } of movements) {
+        const pose = interpolatePose(from, to, progress)
+        const node = nodes.current.get(id)
+        node?.setAttribute('transform', transform(pose))
+        node?.firstElementChild?.setAttribute('transform', `rotate(${pose.heading})`)
+        drawn.current.set(id, pose)
+      }
+      if (progress < 1) frame = requestAnimationFrame(draw)
+    }
+    draw(start)
+    return () => cancelAnimationFrame(frame)
+  }, [vehicles])
+
+  return <g className="vehicle-layer" aria-label={`${vehicles.length} kendaraan sintetis pada peta`}>
+    {vehicles.map(vehicle => <g key={vehicle.id} className="vehicle-position" transform={transform(vehicle)}
+      ref={node => { if (node) nodes.current.set(vehicle.id, node); else nodes.current.delete(vehicle.id) }}>
+      <g transform={`rotate(${vehicle.heading})`} className={`map-vehicle map-vehicle--${vehicle.kind}`} data-vehicle-id={vehicle.id}>
+        <title>{vehicle.kind === 'ambulance' ? 'Ambulans' : vehicle.kind === 'fire_engine' ? 'Pemadam' : 'Mobil'} #{vehicle.id} · dari {directionNames[vehicle.origin]}{vehicle.stopped ? ' · berhenti' : ''}</title>
+        <rect x="-13" y="-9" width="26" height="18" rx="4" /><path className="vehicle-window" d="M5 -6 H9 V6 H5Z" />
+        {vehicle.kind === 'ambulance' && <path className="ambulance-cross" d="M-7 0 H1 M-3 -4 V4" />}
+        {vehicle.kind === 'fire_engine' && <path className="fire-ladder" d="M-9 -4 H2 V4 H-9Z M-5 -4 V4 M-1 -4 V4" />}
+      </g>{vehicle.kind !== 'car' && <text className="evp-number" x="0" y="-17" textAnchor="middle">#{vehicle.id}</text>}
+    </g>)}
+  </g>
+}

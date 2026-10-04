@@ -1,0 +1,196 @@
+{
+  "$defs": {
+    "Observation": {
+      "additionalProperties": false,
+      "properties": {
+        "observed_at": {
+          "format": "date-time",
+          "title": "Observed At",
+          "type": "string"
+        },
+        "usable": {
+          "title": "Usable",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "observed_at",
+        "usable"
+      ],
+      "title": "Observation",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "request_id": {
+      "format": "uuid",
+      "title": "Request Id",
+      "type": "string"
+    },
+    "atcs_run_id": {
+      "format": "uuid",
+      "title": "Atcs Run Id",
+      "type": "string"
+    },
+    "sender_id": {
+      "format": "uuid",
+      "title": "Sender Id",
+      "type": "string"
+    },
+    "action": {
+      "enum": [
+        "observe",
+        "activate",
+        "heartbeat",
+        "plan",
+        "release"
+      ],
+      "title": "Action",
+      "type": "string"
+    },
+    "issued_at": {
+      "format": "date-time",
+      "title": "Issued At",
+      "type": "string"
+    },
+    "expires_at": {
+      "format": "date-time",
+      "title": "Expires At",
+      "type": "string"
+    },
+    "session_id": {
+      "anyOf": [
+        {
+          "format": "uuid",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Session Id"
+    },
+    "sequence": {
+      "anyOf": [
+        {
+          "minimum": 1,
+          "type": "integer"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Sequence"
+    },
+    "expected_revision": {
+      "anyOf": [
+        {
+          "minimum": 0,
+          "type": "integer"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Expected Revision"
+    },
+    "source": {
+      "anyOf": [
+        {
+          "enum": [
+            "cctv",
+            "integration_test"
+          ],
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Source"
+    },
+    "observations": {
+      "anyOf": [
+        {
+          "additionalProperties": {
+            "$ref": "#/$defs/Observation"
+          },
+          "propertyNames": {
+            "enum": [
+              "U",
+              "T",
+              "S",
+              "B"
+            ]
+          },
+          "type": "object"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Observations"
+    },
+    "approach": {
+      "anyOf": [
+        {
+          "enum": [
+            "U",
+            "T",
+            "S",
+            "B"
+          ],
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Approach"
+    },
+    "green_seconds": {
+      "anyOf": [
+        {
+          "exclusiveMinimum": 0,
+          "maximum": 180,
+          "type": "number"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Green Seconds"
+    },
+    "plan_valid_until": {
+      "anyOf": [
+        {
+          "format": "date-time",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Plan Valid Until"
+    }
+  },
+  "required": [
+    "request_id",
+    "atcs_run_id",
+    "sender_id",
+    "action",
+    "issued_at",
+    "expires_at"
+  ],
+  "title": "ControlCommand",
+  "type": "object"
+}

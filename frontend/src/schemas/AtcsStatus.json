@@ -1,0 +1,298 @@
+{
+  "$defs": {
+    "ConflictArea": {
+      "additionalProperties": false,
+      "properties": {
+        "state": {
+          "enum": [
+            "clear",
+            "occupied",
+            "unknown"
+          ],
+          "title": "State",
+          "type": "string"
+        },
+        "source": {
+          "enum": [
+            "assumed_clear",
+            "provider"
+          ],
+          "title": "Source",
+          "type": "string"
+        },
+        "checked_at": {
+          "format": "date-time",
+          "title": "Checked At",
+          "type": "string"
+        }
+      },
+      "required": [
+        "state",
+        "source",
+        "checked_at"
+      ],
+      "title": "ConflictArea",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "schema_version": {
+      "const": "2.0",
+      "default": "2.0",
+      "title": "Schema Version",
+      "type": "string"
+    },
+    "intersection_id": {
+      "title": "Intersection Id",
+      "type": "string"
+    },
+    "operating_context": {
+      "const": "simulation",
+      "default": "simulation",
+      "title": "Operating Context",
+      "type": "string"
+    },
+    "availability": {
+      "enum": [
+        "not_implemented",
+        "available",
+        "unavailable"
+      ],
+      "title": "Availability",
+      "type": "string"
+    },
+    "run_id": {
+      "anyOf": [
+        {
+          "format": "uuid",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Run Id"
+    },
+    "engine_state": {
+      "default": "not_started",
+      "enum": [
+        "not_started",
+        "running",
+        "faulted",
+        "stopped",
+        "stalled"
+      ],
+      "title": "Engine State",
+      "type": "string"
+    },
+    "controller": {
+      "anyOf": [
+        {
+          "enum": [
+            "ATCS",
+            "SIGAP"
+          ],
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "title": "Controller"
+    },
+    "mode": {
+      "anyOf": [
+        {
+          "enum": [
+            "fixed_time",
+            "adaptive",
+            "fallback"
+          ],
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "title": "Mode"
+    },
+    "active_approach": {
+      "anyOf": [
+        {
+          "enum": [
+            "U",
+            "T",
+            "S",
+            "B"
+          ],
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "title": "Active Approach"
+    },
+    "phase": {
+      "anyOf": [
+        {
+          "enum": [
+            "green",
+            "yellow",
+            "all_red"
+          ],
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "title": "Phase"
+    },
+    "signals": {
+      "anyOf": [
+        {
+          "additionalProperties": {
+            "enum": [
+              "red",
+              "yellow",
+              "green"
+            ],
+            "type": "string"
+          },
+          "propertyNames": {
+            "enum": [
+              "U",
+              "T",
+              "S",
+              "B"
+            ]
+          },
+          "type": "object"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Signals"
+    },
+    "clearance_state": {
+      "anyOf": [
+        {
+          "enum": [
+            "minimum",
+            "waiting_conflict",
+            "waiting_command"
+          ],
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Clearance State"
+    },
+    "conflict_area": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/ConflictArea"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "remaining_seconds": {
+      "anyOf": [
+        {
+          "minimum": 0,
+          "type": "number"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "title": "Remaining Seconds"
+    },
+    "simulation_time_seconds": {
+      "anyOf": [
+        {
+          "minimum": 0,
+          "type": "number"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "title": "Simulation Time Seconds"
+    },
+    "sequence_number": {
+      "anyOf": [
+        {
+          "minimum": 0,
+          "type": "integer"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "title": "Sequence Number"
+    },
+    "updated_at": {
+      "anyOf": [
+        {
+          "format": "date-time",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "title": "Updated At"
+    },
+    "observed_at": {
+      "format": "date-time",
+      "title": "Observed At",
+      "type": "string"
+    },
+    "reason": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "title": "Reason"
+    }
+  },
+  "required": [
+    "schema_version",
+    "intersection_id",
+    "operating_context",
+    "availability",
+    "run_id",
+    "engine_state",
+    "controller",
+    "mode",
+    "active_approach",
+    "phase",
+    "signals",
+    "clearance_state",
+    "conflict_area",
+    "remaining_seconds",
+    "simulation_time_seconds",
+    "sequence_number",
+    "updated_at",
+    "observed_at",
+    "reason"
+  ],
+  "title": "AtcsStatus",
+  "type": "object"
+}

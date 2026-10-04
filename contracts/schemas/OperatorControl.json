@@ -1,0 +1,36 @@
+{
+  "additionalProperties": false,
+  "properties": {
+    "request_id": {
+      "format": "uuid",
+      "title": "Request Id",
+      "type": "string"
+    },
+    "action": {
+      "enum": [
+        "activate",
+        "release"
+      ],
+      "title": "Action",
+      "type": "string"
+    },
+    "expected_run_id": {
+      "format": "uuid",
+      "title": "Expected Run Id",
+      "type": "string"
+    },
+    "expected_revision": {
+      "minimum": 0,
+      "title": "Expected Revision",
+      "type": "integer"
+    }
+  },
+  "required": [
+    "request_id",
+    "action",
+    "expected_run_id",
+    "expected_revision"
+  ],
+  "title": "OperatorControl",
+  "type": "object"
+}

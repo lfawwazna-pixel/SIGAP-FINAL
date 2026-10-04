@@ -1,0 +1,393 @@
+{
+  "$defs": {
+    "ExperimentEvent": {
+      "additionalProperties": false,
+      "properties": {
+        "time": {
+          "minimum": 0,
+          "title": "Time",
+          "type": "number"
+        },
+        "message": {
+          "title": "Message",
+          "type": "string"
+        }
+      },
+      "required": [
+        "time",
+        "message"
+      ],
+      "title": "ExperimentEvent",
+      "type": "object"
+    },
+    "VehicleView": {
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "minimum": 1,
+          "title": "Id",
+          "type": "integer"
+        },
+        "origin": {
+          "enum": [
+            "U",
+            "T",
+            "S",
+            "B"
+          ],
+          "title": "Origin",
+          "type": "string"
+        },
+        "movement": {
+          "enum": [
+            "left",
+            "straight",
+            "right"
+          ],
+          "title": "Movement",
+          "type": "string"
+        },
+        "kind": {
+          "enum": [
+            "car",
+            "ambulance",
+            "fire_engine"
+          ],
+          "title": "Kind",
+          "type": "string"
+        },
+        "x": {
+          "maximum": 1020,
+          "minimum": -220,
+          "title": "X",
+          "type": "number"
+        },
+        "y": {
+          "maximum": 1020,
+          "minimum": -220,
+          "title": "Y",
+          "type": "number"
+        },
+        "heading": {
+          "maximum": 180,
+          "minimum": -180,
+          "title": "Heading",
+          "type": "number"
+        },
+        "stopped": {
+          "title": "Stopped",
+          "type": "boolean"
+        },
+        "served": {
+          "title": "Served",
+          "type": "boolean"
+        },
+        "distance_to_stop": {
+          "minimum": 0,
+          "title": "Distance To Stop",
+          "type": "number"
+        }
+      },
+      "required": [
+        "id",
+        "origin",
+        "movement",
+        "kind",
+        "x",
+        "y",
+        "heading",
+        "stopped",
+        "served",
+        "distance_to_stop"
+      ],
+      "title": "VehicleView",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "intersection_id": {
+      "title": "Intersection Id",
+      "type": "string"
+    },
+    "source": {
+      "enum": [
+        "atcs_synthetic",
+        "experiment"
+      ],
+      "title": "Source",
+      "type": "string"
+    },
+    "run_id": {
+      "format": "uuid",
+      "title": "Run Id",
+      "type": "string"
+    },
+    "observed_at": {
+      "format": "date-time",
+      "title": "Observed At",
+      "type": "string"
+    },
+    "available": {
+      "title": "Available",
+      "type": "boolean"
+    },
+    "time_seconds": {
+      "minimum": 0,
+      "title": "Time Seconds",
+      "type": "number"
+    },
+    "running": {
+      "title": "Running",
+      "type": "boolean"
+    },
+    "speed": {
+      "enum": [
+        1,
+        2,
+        3
+      ],
+      "title": "Speed",
+      "type": "integer"
+    },
+    "strategy": {
+      "enum": [
+        "fixed_time",
+        "adaptive"
+      ],
+      "title": "Strategy",
+      "type": "string"
+    },
+    "phase": {
+      "anyOf": [
+        {
+          "enum": [
+            "green",
+            "yellow",
+            "all_red"
+          ],
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "title": "Phase"
+    },
+    "active_approach": {
+      "anyOf": [
+        {
+          "enum": [
+            "U",
+            "T",
+            "S",
+            "B"
+          ],
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "title": "Active Approach"
+    },
+    "signals": {
+      "anyOf": [
+        {
+          "additionalProperties": {
+            "enum": [
+              "red",
+              "yellow",
+              "green"
+            ],
+            "type": "string"
+          },
+          "propertyNames": {
+            "enum": [
+              "U",
+              "T",
+              "S",
+              "B"
+            ]
+          },
+          "type": "object"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "title": "Signals"
+    },
+    "remaining_seconds": {
+      "anyOf": [
+        {
+          "minimum": 0,
+          "type": "number"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "title": "Remaining Seconds"
+    },
+    "emergency": {
+      "title": "Emergency",
+      "type": "boolean"
+    },
+    "target_vehicle": {
+      "anyOf": [
+        {
+          "type": "integer"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "title": "Target Vehicle"
+    },
+    "reason": {
+      "title": "Reason",
+      "type": "string"
+    },
+    "demand": {
+      "additionalProperties": {
+        "maximum": 60,
+        "minimum": 0,
+        "type": "integer"
+      },
+      "propertyNames": {
+        "enum": [
+          "U",
+          "T",
+          "S",
+          "B"
+        ]
+      },
+      "title": "Demand",
+      "type": "object"
+    },
+    "blocked_exit": {
+      "anyOf": [
+        {
+          "enum": [
+            "U",
+            "T",
+            "S",
+            "B"
+          ],
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "title": "Blocked Exit"
+    },
+    "events": {
+      "items": {
+        "$ref": "#/$defs/ExperimentEvent"
+      },
+      "maxItems": 100,
+      "title": "Events",
+      "type": "array"
+    },
+    "evp_queue": {
+      "items": {
+        "type": "integer"
+      },
+      "maxItems": 160,
+      "title": "Evp Queue",
+      "type": "array"
+    },
+    "vehicles": {
+      "items": {
+        "$ref": "#/$defs/VehicleView"
+      },
+      "maxItems": 160,
+      "title": "Vehicles",
+      "type": "array"
+    },
+    "queues": {
+      "additionalProperties": {
+        "minimum": 0,
+        "type": "integer"
+      },
+      "propertyNames": {
+        "enum": [
+          "U",
+          "T",
+          "S",
+          "B"
+        ]
+      },
+      "title": "Queues",
+      "type": "object"
+    },
+    "completed": {
+      "minimum": 0,
+      "title": "Completed",
+      "type": "integer"
+    },
+    "average_wait": {
+      "minimum": 0,
+      "title": "Average Wait",
+      "type": "number"
+    },
+    "waiting_seconds": {
+      "minimum": 0,
+      "title": "Waiting Seconds",
+      "type": "number"
+    },
+    "refused_spawns": {
+      "minimum": 0,
+      "title": "Refused Spawns",
+      "type": "integer"
+    },
+    "conflict": {
+      "enum": [
+        "clear",
+        "occupied",
+        "unknown"
+      ],
+      "title": "Conflict",
+      "type": "string"
+    },
+    "traffic_sequence": {
+      "minimum": 0,
+      "title": "Traffic Sequence",
+      "type": "integer"
+    }
+  },
+  "required": [
+    "intersection_id",
+    "source",
+    "run_id",
+    "observed_at",
+    "available",
+    "time_seconds",
+    "running",
+    "speed",
+    "strategy",
+    "phase",
+    "active_approach",
+    "signals",
+    "remaining_seconds",
+    "emergency",
+    "target_vehicle",
+    "reason",
+    "demand",
+    "blocked_exit",
+    "events",
+    "evp_queue",
+    "vehicles",
+    "queues",
+    "completed",
+    "average_wait",
+    "waiting_seconds",
+    "refused_spawns",
+    "conflict",
+    "traffic_sequence"
+  ],
+  "title": "TrafficView",
+  "type": "object"
+}
