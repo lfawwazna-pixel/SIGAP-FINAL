@@ -26,7 +26,7 @@ def test_commands_need_csrf_origin_and_do_not_send_atcs_requests(auth_context):
     initial = client.get('/api/simulation').json()
     TrafficView.model_validate(initial)
     assert not initial['running'] and initial['time_seconds'] == 0
-    body = {'action': 'spawn', 'expected_run_id': initial['run_id'], 'direction': 'U', 'kind': 'ambulance', 'distance': 100}
+    body = {'action': 'spawn', 'expected_run_id': initial['run_id'], 'direction': 'U', 'kind': 'ambulance'}
     assert client.post('/api/simulation/commands', headers=ORIGIN, json=body).status_code == 403
     headers = {**ORIGIN, 'X-CSRF-Token': csrf}
     assert client.post('/api/simulation/commands', headers={**headers, 'Origin': 'https://other.invalid'}, json=body).status_code == 403
@@ -34,6 +34,8 @@ def test_commands_need_csrf_origin_and_do_not_send_atcs_requests(auth_context):
     assert response.status_code == 200
     assert len(response.json()['vehicles']) == 1
     assert response.json()['vehicles'][0]['kind'] == 'ambulance'
+    assert response.json()['vehicles'][0]['y'] == -400
+    assert response.json()['vehicles'][0]['distance_to_stop'] == 657
     assert response.json()['time_seconds'] == 0
     result = client.post('/api/simulation/commands', headers=headers,
                          json={'action': 'reset', 'expected_run_id': initial['run_id']}).json()
@@ -46,6 +48,7 @@ def test_commands_need_csrf_origin_and_do_not_send_atcs_requests(auth_context):
     {'action': 'configure', 'demand': {'U': 10}}, {'action': 'start', 'direction': 'U'},
     {'action': 'spawn', 'direction': 'U', 'kind': 'car', 'distance': 100},
     {'action': 'spawn', 'direction': 'U', 'kind': 'ambulance', 'distance': -1},
+    {'action': 'spawn', 'direction': 'U', 'kind': 'ambulance', 'distance': 100},
     {'action': 'override', 'controller': 'ATCS'},
 ])
 def test_bad_commands_cannot_mutate_state(auth_context, fields):
@@ -63,7 +66,7 @@ def test_experiments_are_owned_by_account(auth_context):
     csrf = login(client).json()['csrf_token']
     initial = client.get('/api/simulation').json()
     client.post('/api/simulation/commands', headers={**ORIGIN, 'X-CSRF-Token': csrf},
-                json={'action': 'spawn', 'expected_run_id': initial['run_id'], 'direction': 'U', 'kind': 'ambulance', 'distance': 100})
+                json={'action': 'spawn', 'expected_run_id': initial['run_id'], 'direction': 'U', 'kind': 'ambulance'})
     with Session(engine) as db, db.begin():
         create_operator(db, 'second.operator', 'Second Operator', PASSWORD)
     assert login(client, username='second.operator').status_code == 200

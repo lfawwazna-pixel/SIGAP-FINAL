@@ -1,7 +1,8 @@
 """Isolated experiment clock and controller; never sends commands to operational ATCS."""
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from uuid import uuid4
 from atcs_simulator.app.traffic import DIRECTIONS, TrafficWorld
+from adaptive.policy import AdaptivePolicy, measure_world
 
 
 class Experiment:
@@ -18,6 +19,8 @@ class Experiment:
         self.deadline = config.fixed_time.all_red_min_seconds
         self.fixed_next = 0
         self.last_served = dict.fromkeys(DIRECTIONS, 0.0)
+        self.adaptive = AdaptivePolicy()
+        self.decision = None
         self.target = None
         self.emergency = False
         self.reason = 'Percobaan siap; tekan Mulai. ATCS utama tetap berjalan.'
@@ -35,13 +38,12 @@ class Experiment:
 
     def pick_normal(self):
         if self.strategy == 'fixed_time':
+            self.decision = None
             return self.config.fixed_time.sequence[self.fixed_next]
-        eligible = [d for d in DIRECTIONS if any(v.route.origin == d and not v.committed and v.route.movement != 'left' for v in self.world.vehicles)]
-        if not eligible:
-            return min(DIRECTIONS, key=lambda d: (self.last_served[d], DIRECTIONS.index(d)))
-        # Age prevents a persistent busy approach from starving quieter approaches.
-        return max(eligible, key=lambda d: (self.world.time-self.last_served[d]) +
-                   4*sum(v.route.origin == d and not v.committed for v in self.world.vehicles))
+        at = datetime(2026, 1, 1, tzinfo=timezone.utc)+timedelta(seconds=self.world.time)
+        batch = measure_world(self.world, self.config.intersection_id, self.run_id, at)
+        self.decision = self.adaptive.choose(batch, self.world.time, at)
+        return self.decision.approach
 
     def tick(self, dt):
         self.world.step(dt, self.signals)
@@ -55,6 +57,7 @@ class Experiment:
             self.deadline = min(self.deadline, now)
         if candidates and not self.emergency:
             self.emergency = True
+            self.decision = None
             self.reason = 'EVP terdeteksi; keputusan adaptif ditangguhkan.'
             self.world.record(self.reason)
             if self.phase == 'green':
@@ -87,11 +90,17 @@ class Experiment:
                     self.emergency = False
                     self.world.record('Semua EVP selesai; kembali ke strategi '+self.strategy+'.')
                 direction = self.pick_normal()
+                if direction is None:
+                    self.reason = self.decision.reason
+                    return
                 queue = sum(v.route.origin == direction and not v.committed for v in self.world.vehicles)
-                duration = timing.green_seconds[direction] if self.strategy == 'fixed_time' else min(40, max(10, 8+queue*3))
+                duration = timing.green_seconds[direction] if self.strategy == 'fixed_time' else self.decision.green_seconds
+                self.adaptive.served(direction, now)
+                if self.decision:
+                    self.decision.outcome = 'applied'
                 self.transition('green', direction, duration,
                                 f'{"Adaptif percobaan" if self.strategy == "adaptive" else "Fixed-time percobaan"}: '
-                                f'{direction}, {queue} kendaraan, hijau {duration} detik.')
+                                f'{direction}, {queue} kendaraan, hijau {duration} detik. '+(self.decision.reason if self.decision else ''))
 
     def advance(self, seconds):
         if not self.running:
@@ -113,4 +122,5 @@ class Experiment:
             'emergency': self.emergency, 'target_vehicle': self.target, 'reason': self.reason,
             'demand': dict(self.world.demand), 'blocked_exit': self.world.blocked_exit,
             'events': list(self.world.events), 'evp_queue': [v.id for v in candidates], **self.world.snapshot(),
+            'decision': self.decision,
         }

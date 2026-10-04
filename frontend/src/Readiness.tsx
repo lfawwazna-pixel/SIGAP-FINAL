@@ -24,6 +24,7 @@ function rowsFor(snapshot: Snapshot): Row[] {
     if (resource.state !== 'ready') return missing(resource)
     const value = resource.data.capabilities[key]
     if (value === 'available') return { label: key === 'authentication' ? 'Tersedia · sesi operator' : 'Tersedia', tone: 'good' }
+    if (value === 'configured') return { label: 'Alamat tersedia · lihat status video', tone: 'quiet' }
     if (value === 'unavailable') return { label: 'Belum tersedia', tone: 'unavailable' }
     if (value === 'running') return { label: 'Berjalan', tone: 'good' }
     if (value === 'faulted') return { label: 'Gangguan mesin', tone: 'unavailable' }

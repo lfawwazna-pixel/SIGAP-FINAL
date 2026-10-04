@@ -15,9 +15,9 @@ let lostAcknowledgment = false
 let frozen = false
 let posts = 0
 const flush = async (ms = 0) => { await act(async () => { await vi.advanceTimersByTimeAsync(ms) }) }
-function Screen({ mayControl = true }) {
-  const control = useControl(config.intersection_id, sessionFixture().csrf_token, mayControl)
-  return <ControlPanel control={control} mayControl={mayControl} />
+function Screen({ mayControl = true, allowSynthetic = false }) {
+  const control = useControl(config.intersection_id, sessionFixture().csrf_token, mayControl, allowSynthetic)
+  return <ControlPanel control={control} mayControl={mayControl} allowSynthetic={allowSynthetic} />
 }
 const activate = () => screen.getByRole('button', { name: 'Aktifkan kendali SIGAP' }) as HTMLButtonElement
 const release = () => screen.getByRole('button', { name: 'Kembalikan ke ATCS' }) as HTMLButtonElement
@@ -89,6 +89,22 @@ it('sends the displayed run/revision with CSRF and distinguishes accepted from a
   expect(release().disabled).toBe(false)
   expect(activate().disabled).toBe(true)
   expect(posts).toBe(1)
+})
+
+it('requires both source gates for explicitly labelled stage five activation', async () => {
+  status.source = 'integration_test'
+  const view = render(<Screen allowSynthetic />)
+  await flush()
+  expect(activate().disabled).toBe(true)
+  status.allow_test_source = true
+  await flush(700)
+  const button = screen.getByRole('button', { name: 'Aktifkan SIGAP dengan data buatan' }) as HTMLButtonElement
+  expect(button.disabled).toBe(false)
+  fireEvent.click(button)
+  await flush()
+  expect(posts).toBe(1)
+  expect(body).toMatchObject({action:'activate'})
+  view.unmount()
 })
 
 it('recovers a lost acknowledgement using a receipt without resending control', async () => {

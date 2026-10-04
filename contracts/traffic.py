@@ -2,6 +2,7 @@ from typing import Annotated, Literal
 from uuid import UUID
 from pydantic import AwareDatetime, Field, model_validator
 from contracts.models import Contract, Direction, Phase, Signal
+from contracts.adaptive import AdaptiveDecision
 
 Nonnegative = Annotated[float, Field(ge=0, allow_inf_nan=False)]
 
@@ -11,12 +12,16 @@ class VehicleView(Contract):
     origin: Direction
     movement: Literal['left', 'straight', 'right']
     kind: Literal['car', 'ambulance', 'fire_engine']
-    x: float = Field(ge=-220, le=1020, allow_inf_nan=False)
-    y: float = Field(ge=-220, le=1020, allow_inf_nan=False)
+    x: float = Field(ge=-420, le=1220, allow_inf_nan=False)
+    y: float = Field(ge=-420, le=1220, allow_inf_nan=False)
     heading: float = Field(ge=-180, le=180, allow_inf_nan=False)
     stopped: bool
     served: bool
     distance_to_stop: Nonnegative
+    lane: Literal['outer', 'middle', 'inner']
+    target_lane: Literal['outer', 'middle', 'inner']
+    changing_to: Literal['outer', 'middle', 'inner'] | None
+    stop_reason: Literal['following', 'yielding', 'signal', 'exit_blocked', 'conflict', 'safety_gap', 'stationary'] | None = None
 
 
 class ExperimentEvent(Contract):
@@ -25,6 +30,7 @@ class ExperimentEvent(Contract):
 
 
 class TrafficView(Contract):
+    decision: AdaptiveDecision | None = None
     intersection_id: str
     source: Literal['atcs_synthetic', 'experiment']
     run_id: UUID
@@ -79,7 +85,6 @@ class SimulationCommand(Contract):
     blocked_exit: Direction | Literal['none'] | None = None
     direction: Direction | None = None
     kind: Literal['ambulance', 'fire_engine'] | None = None
-    distance: Annotated[int, Field(ge=45, le=450, strict=True)] | None = None
 
     @model_validator(mode='after')
     def valid_action(self):
@@ -92,6 +97,6 @@ class SimulationCommand(Contract):
             raise ValueError('Missing configuration value')
         if self.demand is not None and set(self.demand) != {'U', 'T', 'S', 'B'}:
             raise ValueError('Four arrival rates required')
-        if self.action == 'spawn' and (extra != {'direction', 'kind', 'distance'} or None in (self.direction, self.kind, self.distance)):
-            raise ValueError('Spawn requires direction, kind and distance')
+        if self.action == 'spawn' and (extra != {'direction', 'kind'} or None in (self.direction, self.kind)):
+            raise ValueError('Spawn requires direction and kind; entry is always upstream')
         return self

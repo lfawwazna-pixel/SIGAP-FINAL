@@ -14,8 +14,8 @@ class Contract(BaseModel):
 
 class Geometry(Contract):
     driving_side: Literal["left"]
-    incoming_lanes_per_approach: Literal[2]
-    outgoing_lanes_per_approach: Literal[2]
+    incoming_lanes_per_approach: Literal[3]
+    outgoing_lanes_per_approach: Literal[3]
     median: Literal[True]
     left_turn_slip_roads: Literal[4]
     separating_islands: Literal[True]
@@ -31,11 +31,13 @@ class Geometry(Contract):
 
 class OuterLane(Contract):
     left: Direction
+
+
+class MiddleLane(Contract):
     straight: Direction
 
 
 class InnerLane(Contract):
-    straight: Direction
     right: Direction
 
 
@@ -44,6 +46,7 @@ class Approach(Contract):
     road: str = Field(min_length=1)
     side: str = Field(min_length=1)
     outer: OuterLane
+    middle: MiddleLane
     inner: InnerLane
 
 
@@ -78,7 +81,7 @@ class Provenance(Contract):
 
 
 class IntersectionConfig(Contract):
-    schema_version: Literal["1.0"]
+    schema_version: Literal["2.0"]
     intersection_id: str = Field(min_length=1)
     name: str = Field(min_length=1)
     location: str
@@ -96,8 +99,8 @@ class IntersectionConfig(Contract):
             raise ValueError("Empat pendekat unik diperlukan.")
         for item in self.approaches:
             i = ring.index(item.code)
-            if (item.outer.left, item.outer.straight, item.inner.straight, item.inner.right) != (
-                ring[(i + 1) % 4], ring[(i + 2) % 4], ring[(i + 2) % 4], ring[(i + 3) % 4]
+            if (item.outer.left, item.middle.straight, item.inner.right) != (
+                ring[(i + 1) % 4], ring[(i + 2) % 4], ring[(i + 3) % 4]
             ):
                 raise ValueError(f"Gerakan pendekat {item.code} tidak sesuai lalu lintas sisi kiri.")
         return self
@@ -108,7 +111,7 @@ class Capabilities(Contract):
     authentication: Literal["not_implemented", "available", "unavailable"] = "not_implemented"
     override: Literal["not_implemented", "available", "unavailable"] = "not_implemented"
     ai: Literal["not_implemented"] = "not_implemented"
-    cctv: Literal["not_configured"] = "not_configured"
+    cctv: Literal["not_configured", "configured"] = "not_configured"
 
 
 class DatabaseCheck(Contract):
@@ -118,7 +121,7 @@ class DatabaseCheck(Contract):
 
 class Health(Contract):
     service: Literal["backend", "atcs"]
-    stage: Literal["2A", "2B", "2D", "2F", "4"] = "2B"
+    stage: Literal["2A", "2B", "2D", "2F", "4", "5"] = "2B"
     liveness: Literal["alive"] = "alive"
     foundation_ready: bool
     checked_at: AwareDatetime

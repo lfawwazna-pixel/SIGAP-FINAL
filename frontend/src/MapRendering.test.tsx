@@ -4,11 +4,12 @@ import { IntersectionMap } from './IntersectionMap'
 import { interpolatePose } from './VehicleLayer'
 import { MapZoom } from './MapZoom'
 import { Monitor } from './Monitor'
+import { LoginScreen } from './LoginScreen'
 import { config, respond, sessionFixture, statusFixture, pageFixture } from './testFixtures'
 import type { TrafficView } from './types/TrafficView'
 
 const car: TrafficView['vehicles'][number] = { id: 1, kind: 'car', origin: 'U', movement: 'left',
-  x: 500, y: 180, heading: 60, stopped: false, distance_to_stop: 120, served: false }
+  x: 500, y: 180, heading: 60, stopped: false, stop_reason: null, distance_to_stop: 120, served: false, lane: 'outer', target_lane: 'outer', changing_to: null }
 const props = { selected: 'U' as const, onSelect: () => undefined, signals: null, routes: true }
 const flush = async (ms = 0) => { await act(async () => { await vi.advanceTimersByTimeAsync(ms) }) }
 beforeEach(() => {
@@ -25,6 +26,40 @@ it('uses a continuous asphalt outline and four separate islands without overlaid
   expect(container.querySelectorAll('.slip-road, .slip-edge')).toHaveLength(0)
   expect(container.querySelectorAll('[data-slip-road]')).toHaveLength(4)
   expect(container.querySelectorAll('[data-island]')).toHaveLength(4)
+  expect(container.querySelectorAll('[data-incoming-lane]')).toHaveLength(12)
+  expect(screen.getByRole('img', { name: 'Rambu Utara lajur kiri: ruas pintas kiri' })).toBeTruthy()
+  expect(screen.getByRole('img', { name: 'Rambu Utara lajur tengah: lurus' })).toBeTruthy()
+  expect(screen.getByRole('img', { name: 'Rambu Utara lajur kanan: belok kanan' })).toBeTruthy()
+})
+
+it('shows the changing lane and turn indicator from the traffic snapshot', () => {
+  const { container } = render(<IntersectionMap {...props} vehicles={[{ ...car, lane: 'middle', changing_to: 'outer' }]} />)
+  expect(container.querySelector('[data-changing-to="outer"]')).toBeTruthy()
+  expect(container.querySelector('.vehicle-indicator')).toBeTruthy()
+  expect(container.querySelector('[data-vehicle-id="1"] title')?.textContent).toContain('berpindah ke kiri')
+})
+
+it('explores the same road geometry on login without showing live signals or vehicles', () => {
+  const main = render(<IntersectionMap {...props} />)
+  const outline = main.container.querySelector('.road')?.getAttribute('d')
+  const dividers = main.container.querySelector('.lane-divider')?.getAttribute('d')
+  main.unmount()
+  const login = render(<LoginScreen screen="guest" busy={false} message="" onSubmit={async () => undefined} onRetry={() => undefined} />)
+  expect(login.container.querySelector('.road')?.getAttribute('d')).toBe(outline)
+  expect(login.container.querySelector('.lane-divider')?.getAttribute('d')).toBe(dividers)
+  expect(login.container.querySelectorAll('[data-slip-road]')).toHaveLength(4)
+  expect(login.container.querySelectorAll('[data-island]')).toHaveLength(4)
+  expect(login.container.querySelectorAll('[data-signal], [data-vehicle-id]')).toHaveLength(0)
+  fireEvent.click(screen.getByRole('button', { name: 'B Barat' }))
+  expect(login.container.querySelector('.login-selected-route')?.getAttribute('transform')).toBe('rotate(270 400 400)')
+  expect(login.container.querySelectorAll('.login-selected-route path')).toHaveLength(3)
+  expect(screen.getByRole('img', { name: /Ilustrasi rute dari Barat/ })).toBeTruthy()
+})
+
+it('exposes the actual reason for a stopped vehicle in its map tooltip', () => {
+  const view = render(<IntersectionMap {...props} vehicles={[{ ...car, stopped: true, stop_reason: 'signal' }]} />)
+  expect(view.container.querySelector('[data-vehicle-id] title')?.textContent).toContain('menunggu lampu')
+  expect(view.container.querySelector('[data-stop-reason="signal"]')).toBeTruthy()
 })
 
 it('keeps vehicle positions in SVG coordinates when viewport size/zoom changes', async () => {

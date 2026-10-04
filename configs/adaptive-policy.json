@@ -1,0 +1,10 @@
+{
+  "minimum_green": 10,
+  "maximum_green": 60,
+  "queue_weight": 4,
+  "wait_weight": 1,
+  "age_weight": 0.5,
+  "service_age_target": 120,
+  "seconds_per_queued_vehicle": 2,
+  "data_timeout": 3
+}

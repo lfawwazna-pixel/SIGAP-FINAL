@@ -1,0 +1,108 @@
+{
+  "$defs": {
+    "ApproachMeasurement": {
+      "additionalProperties": false,
+      "properties": {
+        "observed_at": {
+          "format": "date-time",
+          "title": "Observed At",
+          "type": "string"
+        },
+        "usable": {
+          "title": "Usable",
+          "type": "boolean"
+        },
+        "controlled_count": {
+          "maximum": 10000,
+          "minimum": 0,
+          "title": "Controlled Count",
+          "type": "integer"
+        },
+        "queue_count": {
+          "maximum": 10000,
+          "minimum": 0,
+          "title": "Queue Count",
+          "type": "integer"
+        },
+        "oldest_wait_seconds": {
+          "minimum": 0,
+          "title": "Oldest Wait Seconds",
+          "type": "number"
+        },
+        "slip_count": {
+          "maximum": 10000,
+          "minimum": 0,
+          "title": "Slip Count",
+          "type": "integer"
+        },
+        "exit_available": {
+          "title": "Exit Available",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "observed_at",
+        "usable",
+        "controlled_count",
+        "queue_count",
+        "oldest_wait_seconds",
+        "slip_count",
+        "exit_available"
+      ],
+      "title": "ApproachMeasurement",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "intersection_id": {
+      "title": "Intersection Id",
+      "type": "string"
+    },
+    "source": {
+      "enum": [
+        "synthetic",
+        "recording",
+        "cctv"
+      ],
+      "title": "Source",
+      "type": "string"
+    },
+    "source_session": {
+      "format": "uuid",
+      "title": "Source Session",
+      "type": "string"
+    },
+    "sequence": {
+      "minimum": 0,
+      "title": "Sequence",
+      "type": "integer"
+    },
+    "approaches": {
+      "additionalProperties": {
+        "$ref": "#/$defs/ApproachMeasurement"
+      },
+      "maxProperties": 4,
+      "minProperties": 4,
+      "propertyNames": {
+        "enum": [
+          "U",
+          "T",
+          "S",
+          "B"
+        ]
+      },
+      "title": "Approaches",
+      "type": "object"
+    }
+  },
+  "required": [
+    "intersection_id",
+    "source",
+    "source_session",
+    "sequence",
+    "approaches"
+  ],
+  "title": "MeasurementBatch",
+  "type": "object"
+}

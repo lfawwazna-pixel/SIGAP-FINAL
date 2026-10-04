@@ -13,7 +13,7 @@ const validStatus = ajv.compile<ControlStatus>(statusSchema)
 const validReceipt = ajv.compile<CommandReceipt>(receiptSchema)
 const base = (import.meta.env.VITE_API_BASE_URL || '/api').replace(/\/$/, '')
 
-export function useControl(intersection: string | undefined, csrf: string, mayControl: boolean) {
+export function useControl(intersection: string | undefined, csrf: string, mayControl: boolean, allowSynthetic = false) {
   const [status, setStatus] = useState<ControlStatus | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [receipt, setReceipt] = useState<CommandReceipt | null>(null)
@@ -99,7 +99,8 @@ export function useControl(intersection: string | undefined, csrf: string, mayCo
   async function command(action: 'activate' | 'release') {
     const state = current.current
     if (locked.current || !state || !mayControl || document.hidden) return
-    if (action === 'activate' && (!state.ready || state.source !== 'cctv' || state.state !== 'fixed_time')) return
+    const sourceAllowed = state.source === 'cctv' || (allowSynthetic && state.allow_test_source && state.source === 'integration_test')
+    if (action === 'activate' && (!state.ready || !sourceAllowed || state.state !== 'fixed_time')) return
     if (action === 'release' && !state.session_id) return
     locked.current = true
     setPending(true)

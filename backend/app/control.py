@@ -64,8 +64,10 @@ class ControlAdapter:
                     raise error(409, 'STATE_CHANGED', 'Keadaan ATCS berubah. Periksa status terbaru sebelum mencoba lagi.')
                 if not status.available or status.sender_id is None:
                     raise error(409, 'NOT_READY', 'Belum ada sumber SIGAP yang siap mengambil kendali.')
-                if payload.action == 'activate' and (not status.ready or status.source != 'cctv' or status.state != 'fixed_time'):
-                    raise error(409, 'NOT_READY', 'Aktivasi dari dashboard memerlukan sumber CCTV yang siap.')
+                allowed_source = status.source == 'cctv' or (status.source == 'integration_test'
+                    and status.allow_test_source and self.settings.sigap_adaptive_synthetic)
+                if payload.action == 'activate' and (not status.ready or not allowed_source or status.state != 'fixed_time'):
+                    raise error(409, 'NOT_READY', 'Aktivasi memerlukan sumber yang siap dan diizinkan oleh konfigurasi layanan.')
                 if payload.action == 'release' and status.session_id is None:
                     raise error(409, 'NO_SESSION', 'Tidak ada sesi SIGAP untuk dilepas.')
                 at = datetime.now(timezone.utc)

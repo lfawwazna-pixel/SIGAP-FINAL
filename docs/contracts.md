@@ -2,6 +2,8 @@
 
 Sumber definisi: `contracts/models.py`, `contracts/traffic.py`, dan `contracts/control.py`. JSON Schema pada `contracts/schemas/` serta tipe/schema frontend merupakan hasil generasi dari sumber tersebut. Konfigurasi persimpangan tetap satu file; schema bukan salinan waktu lampu yang terpisah. Kontrak input memakai schema validation; kontrak respons memakai schema serialization. Aturan kondisional per action diperiksa validator Python.
 
+Revisi tiga lajur memakai `IntersectionConfig.schema_version=2.0`: `outer.left`, `middle.straight`, `inner.right`, tiga lajur masuk/keluar. `VehicleView` menambahkan `lane`, `target_lane`, dan `changing_to`, dengan koordinat -420–1220. Spawn eksperimen hanya menerima `action`, `expected_run_id`, `direction` dan `kind`; field `distance` lama ditolak. Frontend dan dua layanan Python perlu diperbarui bersama, lalu backend/ATCS direstart. Model kendali Tahap 3/4 tidak berubah.
+
 Setelah mengubah model, jalankan dari root proyek:
 
 ```powershell

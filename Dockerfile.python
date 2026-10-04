@@ -8,9 +8,10 @@ COPY contracts ./contracts
 COPY configs ./configs
 COPY backend ./backend
 COPY atcs_simulator ./atcs_simulator
+COPY adaptive ./adaptive
 COPY database ./database
 COPY alembic.ini ./
-RUN useradd --create-home sigap
+RUN useradd --create-home sigap && mkdir -p /app/work/media && chown -R sigap:sigap /app/work
 USER sigap
 ENV PATH="/app/.venv/bin:$PATH"
 CMD ["uvicorn", "backend.app.main:app", "--host", "0.0.0.0", "--port", "8000", "--no-proxy-headers"]

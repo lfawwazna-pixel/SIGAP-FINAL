@@ -1,6 +1,6 @@
 # Kendaraan dan percobaan — Tahap 2E / 2F
 
-Empat lengan simpang diperpanjang dari batas lama 18–782 menjadi -200–1000 pada koordinat skema. Pusat tetap (400,400). Sejak perbaikan 4 Oktober 2026, ruas pintas dan jalan utama menjadi satu permukaan bertepi kontinu; tetap satu lajur, cukup untuk mobil selebar 18 unit. Kurva dipanjangkan dari titik (470,100) ke (700,330) sebelum dirotasi per arah. Ukuran ini skematis, bukan meter atau hasil survei. Geometri sumber berada pada configs/map-geometry.json, dibaca backend dan disalin ke frontend oleh generator kontrak. Zoom tersedia 50–200% setiap 10%, default 100%, dan hanya mengubah tampilan.
+Revisi tiga lajur sebelum Tahap 5 memakai batas -400–1200 pada koordinat skema, dengan pusat (400,400). Tiap pendekat mempunyai tiga lajur masuk dan keluar. Ruas pintas kiri tetap satu lajur mobil, dengan permukaan jalan kontinu dan pulau pemisah. Kurva acuan bergerak dari (510,100) ke (700,290), dirotasi untuk empat arah. Ukuran ini skematis, bukan meter atau hasil survei. configs/map-geometry.json menjadi sumber geometri backend dan frontend. Zoom 50–200% setiap 10%, default 100%, hanya mengubah tampilan.
 
 ## Tiga pilihan ruang kerja
 
@@ -14,13 +14,15 @@ Memilih tampilan tidak mengirim perintah ke ATCS utama. ATCS tetap berjalan saat
 
 ## Pergerakan kendaraan
 
-TrafficWorld memuat 16 lintasan: kiri lajur luar, lurus luar, lurus dalam dan kanan dalam untuk U/T/S/B. Lajur luar berbagi lintasan masuk sampai percabangan; ruas pintas kiri melewati pulau pemisah lalu bergabung ke lajur keluar luar. Lajur dalam berbagi lintasan lurus/kanan sebelum simpang. Setiap kendaraan memiliki ID, jenis, asal, gerakan, jarak lintasan, waktu tunggu dan status sudah dilayani.
+TrafficWorld memuat 12 lintasan akhir: kiri/luar, lurus/tengah dan kanan/dalam untuk U/T/S/B. Mobil biasa memilih tujuan, lajur awal, kecepatan 44–52 unit/detik dan jeda kedatangan secara acak dengan seed yang dapat diulang. Lajur awal tidak mengunci tujuan. Perpindahan memakai satu lajur per manuver sepanjang 125 unit, dengan gerak lateral halus; perpindahan dua lajur dilakukan dua kali, dipisahkan 24 unit perjalanan.
+
+Zona persiapan U berada dari y=-330 sampai y=40, lalu dirotasi per arah. Percabangan kiri mulai y=100 dan garis henti y=257. Jarak depan minimal 55 unit dan belakang 50 unit diperiksa sebelum pindah; kendaraan menempati kedua lajur selama manuver. Pengendara pada lajur tujuan dapat menunggu untuk membuka celah. Manuver yang berdekatan diserialkan pada setiap pendekat. Jika celah tetap tertutup selama 20 detik, mobil mengikuti gerakan sah dari lajur saat ini; keputusan dibuat di hulu, dicatat, dan tidak mengubah posisi mobil secara mendadak. EVP masuk pada lajur tengah sehingga tujuan lurus dan aturan prioritasnya tetap konsisten.
 
 Substep maksimum 50 ms dipakai pada runtime. Gerak dibatasi oleh sinyal, jarak antarkendaraan, ruang keluar dan kendaraan pada area konflik. Kendaraan baru tidak masuk pada kuning atau merah; kendaraan yang telah melewati gerbang pelayanan menyelesaikan lintasannya. Hanya satu pendekat bersinyal memperoleh hijau/kuning. Perhitungan posisi dan sinyal berada di server; browser menggambar snapshot, bukan menentukan fase.
 
-Selubung jarak pusat 34 unit memuat panjang mobil 26 unit dan jarak antar kendaraan. Grid spasial membatasi pemeriksaan tetangga. Ruas pintas memberi jalan sebelum mencapai jalur keluar bersama; kendaraan yang sudah berada pada jalur keluar didahulukan. Pemeriksaan ini konservatif dan bukan model perilaku pengemudi lapangan.
+Selubung jarak pusat 34 unit memuat mobil 26×18 unit dan jarak aman. Pemeriksaan menyapu segmen perpindahan tiap substep, termasuk gerak lateral, dengan grid spasial untuk tetangga. Tiga gerakan mengisi tiga lajur keluar berbeda; ruas pintas tidak menunggu arus di lajur sebelah, tetapi tetap berhenti jika lajur keluarnya penuh/terblokir. Pemeriksaan ini konservatif dan bukan model pengemudi lapangan.
 
-Ruang keluar dibatasi paling banyak 12 kendaraan yang sudah berkomitmen menuju lajur keluar sama. Skenario keluaran terblokir menahan masuk ke tujuan tersebut. Kemunculan yang tidak memiliki ruang aman ditolak/digeser ke belakang, bukan bertumpuk. Maksimal 160 kendaraan hidup per dunia. Arus default 10 kendaraan/menit per pendekat; laju sintetis dan seed dapat diulang. Arus 0 menghentikan kemunculan otomatis pada pendekat tersebut. Kendaraan tidak pindah lajur atau menembus antrean.
+Ruang keluar dibatasi paling banyak 16 kendaraan yang sudah berkomitmen menuju lajur keluar sama. Skenario keluaran terblokir menahan masuk ke tujuan tersebut. Semua kemunculan publik berada di batas belakang jalan; jika penuh, permintaan ditolak tanpa memindahkan kendaraan ke tengah peta. Maksimal 160 kendaraan hidup per dunia. Arus default 10 kendaraan/menit per pendekat; arus 0 menghentikan kemunculan otomatis.
 
 ATCS memakai TrafficWorld lokal sebagai ConflictProvider. Area konflik kini berdasarkan kendaraan sintetis, bukan assumed_clear. Semua merah minimum diperpanjang sampai kendaraan bersinyal yang sudah masuk selesai melintas. Penyedia konflik khusus masih dapat dipasang untuk pengujian/integrasi berikutnya.
 
@@ -43,7 +45,7 @@ Jam berjalan pada task backend, bukan saat GET diterima. Jeda tab browser menghe
 
 Adaptif percobaan menilai pendekat yang memiliki kendaraan masuk berdasarkan umur sejak pelayanan ditambah empat kali jumlah kendaraan antre/masuk pada pendekat. Umur pelayanan mencegah pendekat sepi terus dikalahkan pendekat ramai. Hijau dipilih antara 10–40 detik menggunakan 8 + 3 × jumlah kendaraan. Ini heuristik percobaan yang berjalan nyata pada data sintetis, bukan hasil YOLO, evaluasi optimasi atau kendali adaptif operasional.
 
-Spawn ambulans/pemadam memilih asal U/T/S/B serta jarak 60/100/180/350 unit skema. Kendaraan darurat percobaan berjalan lurus pada lajur dalam. Jarak dihitung sepanjang lintasan menuju garis henti, bukan koordinat GPS atau meter. Beberapa EVP dapat disiapkan saat jeda lalu dijalankan bersama. Jika posisi terisi, kendaraan ditempatkan lebih ke belakang; panel peta memakai posisi aktual hasil penempatan.
+Spawn ambulans/pemadam memilih asal U/T/S/B dan selalu masuk dari ujung belakang pada lajur tengah, 657 unit skema dari garis henti. API tidak menerima jarak penempatan di tengah jalan. Untuk membuat dua EVP dengan jarak berbeda, jalankan percobaan dan tambahkan kendaraan berikutnya setelah yang pertama bergerak. Beberapa arah tetap dapat disiapkan bersamaan saat jeda; permintaan pada ujung masuk yang penuh ditolak. Prioritas menggunakan jarak aktual sepanjang lintasan, bukan GPS atau meter.
 
 Aturan eksperimen yang diminta pengguna:
 

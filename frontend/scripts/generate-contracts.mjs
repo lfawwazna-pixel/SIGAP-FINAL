@@ -6,10 +6,10 @@ await mkdir(dir, { recursive: true })
 const schemaDir = fileURLToPath(new URL('../src/schemas/', import.meta.url))
 await mkdir(schemaDir, { recursive: true })
 const controlTypes = ['ControlStatus', 'CommandReceipt', 'OperatorControl', 'ControlCommand']
-for (const name of ['Health', 'AtcsStatus', 'IntersectionConfig', 'TrafficEvent', 'TrafficEvents', 'SessionView', 'TrafficView', ...controlTypes]) {
+for (const name of ['Health', 'AtcsStatus', 'IntersectionConfig', 'TrafficEvent', 'TrafficEvents', 'SessionView', 'TrafficView', 'AdaptiveStatus', 'MeasurementBatch', 'VideoStatus', ...controlTypes]) {
   const schema = fileURLToPath(new URL(`../../contracts/schemas/${name}.json`, import.meta.url))
   const value = await compileFromFile(schema, {
-    bannerComment: `/* Generated from contracts/${controlTypes.includes(name) ? 'control' : name === 'TrafficView' ? 'traffic' : 'models'}.py. Do not edit manually. */`,
+    bannerComment: `/* Generated from contracts/${controlTypes.includes(name) ? 'control' : name === 'TrafficView' ? 'traffic' : name === 'VideoStatus' ? 'video' : ['AdaptiveStatus', 'MeasurementBatch'].includes(name) ? 'adaptive' : 'models'}.py. Do not edit manually. */`,
     declareExternallyReferenced: true,
   })
   const file = `${dir}/${name}.ts`

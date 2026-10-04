@@ -79,9 +79,9 @@ class Experiments:
             if command.blocked_exit is not None:
                 experiment.world.blocked_exit = None if command.blocked_exit == 'none' else command.blocked_exit
         elif command.action == 'spawn':
-            vehicle = experiment.world.spawn(command.direction, command.kind, command.distance, lane='inner')
+            vehicle = experiment.world.spawn(command.direction, command.kind)
             if vehicle is None:
-                raise error(409, 'SPAWN_BLOCKED', 'Tidak ada ruang aman untuk kendaraan baru pada pendekat ini.')
+                raise error(409, 'SPAWN_BLOCKED', 'Ujung masuk pendekat sedang penuh. Tunggu ruang aman lalu coba kembali.')
         return experiment
 
 

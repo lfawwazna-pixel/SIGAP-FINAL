@@ -1,5 +1,5 @@
 {
-  "schema_version": "1.0",
+  "schema_version": "2.0",
   "intersection_id": "SIGAP-KIRCON-01",
   "name": "Simpang Ibrahim Adjie–Soekarno Hatta",
   "location": "Kircon, Bandung",
@@ -7,8 +7,8 @@
   "operating_context": "simulation",
   "geometry": {
     "driving_side": "left",
-    "incoming_lanes_per_approach": 2,
-    "outgoing_lanes_per_approach": 2,
+    "incoming_lanes_per_approach": 3,
+    "outgoing_lanes_per_approach": 3,
     "median": true,
     "left_turn_slip_roads": 4,
     "separating_islands": true,
@@ -22,10 +22,10 @@
     "slip_merge_after_intersection": true
   },
   "approaches": [
-    {"code":"U","road":"Jl. Ibrahim Adjie","side":"Utara","outer":{"left":"T","straight":"S"},"inner":{"straight":"S","right":"B"}},
-    {"code":"T","road":"Jl. Soekarno Hatta","side":"Timur","outer":{"left":"S","straight":"B"},"inner":{"straight":"B","right":"U"}},
-    {"code":"S","road":"Jl. Ibrahim Adjie","side":"Selatan","outer":{"left":"B","straight":"U"},"inner":{"straight":"U","right":"T"}},
-    {"code":"B","road":"Jl. Soekarno Hatta","side":"Barat","outer":{"left":"U","straight":"T"},"inner":{"straight":"T","right":"S"}}
+    {"code":"U","road":"Jl. Ibrahim Adjie","side":"Utara","outer":{"left":"T"},"middle":{"straight":"S"},"inner":{"right":"B"}},
+    {"code":"T","road":"Jl. Soekarno Hatta","side":"Timur","outer":{"left":"S"},"middle":{"straight":"B"},"inner":{"right":"U"}},
+    {"code":"S","road":"Jl. Ibrahim Adjie","side":"Selatan","outer":{"left":"B"},"middle":{"straight":"U"},"inner":{"right":"T"}},
+    {"code":"B","road":"Jl. Soekarno Hatta","side":"Barat","outer":{"left":"U"},"middle":{"straight":"T"},"inner":{"right":"S"}}
   ],
   "fixed_time": {
     "sequence": ["U","T","S","B"],

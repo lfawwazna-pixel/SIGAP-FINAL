@@ -6,7 +6,7 @@ import { config, sessionFixture, statusFixture, respond, runId, secondRunId, pag
 import type { TrafficView } from './types/TrafficView'
 
 function fixture(source: TrafficView['source'] = 'experiment'): TrafficView {
-  return { intersection_id: config.intersection_id, source, run_id: source === 'experiment' ? secondRunId : runId,
+  return { decision: null, intersection_id: config.intersection_id, source, run_id: source === 'experiment' ? secondRunId : runId,
     observed_at: '2026-10-03T08:01:00Z', available: true, time_seconds: 0, running: source !== 'experiment', speed: 1,
     strategy: source === 'experiment' ? 'adaptive' : 'fixed_time', phase: 'all_red', active_approach: null,
     signals: { U: 'red', T: 'red', S: 'red', B: 'red' }, remaining_seconds: 2, emergency: false, target_vehicle: null,
@@ -39,7 +39,7 @@ beforeEach(() => {
       const body = JSON.parse(init!.body as string)
       postBodies.push(body)
       postedHeaders = init?.headers
-      if (body.action === 'spawn') simulation = { ...simulation, vehicles: [{ id: 1, kind: body.kind, origin: body.direction, x: 430, y: 120, heading: 90, movement: 'straight', stopped: false, served: false, distance_to_stop: body.distance }] }
+      if (body.action === 'spawn') simulation = { ...simulation, vehicles: [{ id: 1, kind: body.kind, origin: body.direction, x: 1200, y: 470, heading: 180, movement: 'straight', stopped: false, served: false, distance_to_stop: 657, lane: 'middle', target_lane: 'middle', changing_to: null, stop_reason: null }] }
       if (body.action === 'start' || body.action === 'pause') simulation = { ...simulation, running: body.action === 'start' }
       if (body.action === 'configure') simulation = { ...simulation, ...(body.speed ? { speed: body.speed } : {}) }
       if (body.action === 'reset') simulation = { ...fixture(), run_id: runId }
@@ -71,16 +71,16 @@ describe('isolated simulator UI', () => {
     expect(screen.queryByRole('button', { name: 'Jeda' })).toBeNull()
     expect(postBodies.map(x => x.action)).toEqual(['start'])
   })
-  it('adds an ambulance in a selected direction and distance with session CSRF', async () => {
+  it('adds an ambulance from the rear of a selected approach with session CSRF', async () => {
     render(<App />)
     await flush()
     selectSimulation()
     await flush()
     fireEvent.change(screen.getByLabelText('Dari arah'), { target: { value: 'T' } })
-    fireEvent.change(screen.getByLabelText('Jarak awal'), { target: { value: '350' } })
+    expect(screen.queryByLabelText('Jarak awal')).toBeNull()
     fireEvent.click(screen.getByRole('button', { name: /Spawn ambulans/ }))
     await flush()
-    expect(postBodies[0]).toEqual({ action: 'spawn', direction: 'T', kind: 'ambulance', distance: 350, expected_run_id: secondRunId })
+    expect(postBodies[0]).toEqual({ action: 'spawn', direction: 'T', kind: 'ambulance', expected_run_id: secondRunId })
     expect(new Headers(postedHeaders).get('X-CSRF-Token')).toBe(sessionFixture().csrf_token)
     expect(document.querySelectorAll('[data-vehicle-id="1"]').length).toBe(1)
   })
@@ -103,7 +103,7 @@ describe('isolated simulator UI', () => {
   it('shows SIGAP as unavailable without any operational activation request', async () => {
     render(<App />)
     await flush()
-    fireEvent.click(within(screen.getByRole('group', { name: 'Mode ruang kerja' })).getByRole('button', { name: /SIGAP Kesiapan sumber/ }))
+    fireEvent.click(within(screen.getByRole('group', { name: 'Mode ruang kerja' })).getByRole('button', { name: /SIGAP Adaptif/ }))
     expect((screen.getByRole('button', { name: 'Aktifkan kendali SIGAP' }) as HTMLButtonElement).disabled).toBe(true)
     expect(screen.getByRole('heading', { name: 'Pengaturan kendali' })).toBeTruthy()
     expect(postBodies).toHaveLength(0)

@@ -4,9 +4,9 @@ Monitor bersifat baca saja. ATCS tetap menjalankan siklusnya ketika monitor ditu
 
 ## Geometri dan cara menggunakan
 
-- U/S memakai Jl. Ibrahim Adjie; T/B memakai Jl. Soekarno Hatta sesuai konfigurasi. Setiap pendekat mempunyai dua lajur masuk dan dua lajur keluar, dengan lalu lintas di kiri.
-- Lajur luar bercabang sebelum garis henti. Cabang kiri melewati ruas pintas di sisi luar pulau pemisah, bergabung kembali setelah simpang, dan dilengkapi rambu beri jalan. Cabang lurus mengikuti lampu.
-- Lajur dalam untuk lurus/kanan. Tidak digambar putar balik atau perpindahan lajur di tengah simpang. Rambu arah tiap lajur dan panah marka menunjukkan pergerakan yang diperbolehkan dalam model.
+- U/S memakai Jl. Ibrahim Adjie; T/B memakai Jl. Soekarno Hatta sesuai konfigurasi. Setiap pendekat mempunyai tiga lajur masuk dan tiga lajur keluar, dengan lalu lintas di kiri.
+- Di hulu, kendaraan dapat berpindah lajur secara bertahap. Mendekati simpang, kiri khusus ruas pintas, tengah lurus dan kanan belok kanan. Pulau memisahkan ruas pintas dari antrean lampu.
+- Lurus/kanan mengikuti lampu. Perpindahan lajur tidak dilakukan di tengah simpang, ruas pintas atau tikungan. Indikator kuning dan orientasi mobil menunjukkan manuver yang sedang berlangsung; rambu dan marka menunjukkan tujuan lajur.
 - Klik label arah pada peta, atau tombol U/T/S/B di panel. Keyboard Enter/Spasi memilih label peta. Panel menjelaskan asal, tujuan, dan sinyal pendekat yang dipilih.
 - Tombol Rute terpilih mengatur garis putus-putus lurus/kanan. Garis biru pada ruas pintas tetap terlihat; warna rute tidak menunjukkan izin melintas. Lampu dan label merah/kuning/hijau adalah indikator status sinyal.
 - Geometri simetris dan rambu merupakan skema simulasi, bukan hasil pengukuran atau inventaris rambu lapangan.

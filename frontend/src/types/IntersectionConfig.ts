@@ -1,14 +1,14 @@
 /* Generated from contracts/models.py. Do not edit manually. */
 
-export type SchemaVersion = "1.0";
+export type SchemaVersion = "2.0";
 export type IntersectionId = string;
 export type Name = string;
 export type Location = string;
 export type Timezone = "Asia/Jakarta";
 export type OperatingContext = "simulation";
 export type DrivingSide = "left";
-export type IncomingLanesPerApproach = 2;
-export type OutgoingLanesPerApproach = 2;
+export type IncomingLanesPerApproach = 3;
+export type OutgoingLanesPerApproach = 3;
 export type Median = true;
 export type LeftTurnSlipRoads = 4;
 export type SeparatingIslands = true;
@@ -30,7 +30,6 @@ export type Road = string;
 export type Side = string;
 export type Left = "U" | "T" | "S" | "B";
 export type Straight = "U" | "T" | "S" | "B";
-export type Straight1 = "U" | "T" | "S" | "B";
 export type Right = "U" | "T" | "S" | "B";
 /**
  * @minItems 4
@@ -81,14 +80,16 @@ export interface Approach {
   road: Road;
   side: Side;
   outer: OuterLane;
+  middle: MiddleLane;
   inner: InnerLane;
 }
 export interface OuterLane {
   left: Left;
+}
+export interface MiddleLane {
   straight: Straight;
 }
 export interface InnerLane {
-  straight: Straight1;
   right: Right;
 }
 export interface FixedTime {

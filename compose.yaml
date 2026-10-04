@@ -24,7 +24,7 @@ services:
     environment:
       SIGAP_CONFIG_PATH: /app/configs/intersection.json
       SIGAP_CONTROL_API_KEY: ${SIGAP_CONTROL_API_KEY:-}
-      ATCS_ENABLE_TEST_SOURCE: "false"
+      ATCS_ENABLE_TEST_SOURCE: ${ATCS_ENABLE_TEST_SOURCE:-false}
     ports:
       - "127.0.0.1:${ATCS_PORT:-8001}:8001"
     volumes:
@@ -47,6 +47,8 @@ services:
       SIGAP_DB_PORT: "5432"
       SIGAP_CONFIG_PATH: /app/configs/intersection.json
       SIGAP_ATCS_BASE_URL: http://atcs:8001
+      SIGAP_ADAPTIVE_SYNTHETIC: ${SIGAP_ADAPTIVE_SYNTHETIC:-false}
+      SIGAP_CAMERA_URLS: '${SIGAP_CAMERA_URLS:-{}}'
       SIGAP_CONTROL_API_KEY: ${SIGAP_CONTROL_API_KEY:-}
       SIGAP_SESSION_SECONDS: ${SIGAP_SESSION_SECONDS:-28800}
       SIGAP_COOKIE_SECURE: ${SIGAP_COOKIE_SECURE:-false}
@@ -55,6 +57,7 @@ services:
       - "127.0.0.1:${BACKEND_PORT:-8000}:8000"
     volumes:
       - ./configs:/app/configs:ro
+      - sigap_media:/app/work/media
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/api/health/live',timeout=2)"]
       interval: 10s
@@ -72,3 +75,4 @@ services:
 
 volumes:
   sigap_pgdata:
+  sigap_media:

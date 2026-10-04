@@ -10,6 +10,8 @@ import { useControl } from './useControl'
 import { ControlPanel } from './ControlPanel'
 import { MapZoom } from './MapZoom'
 import { SigapLogo } from './SigapLogo'
+import { AdaptivePanel, useAdaptive } from './AdaptivePanel'
+import { VideoPanel } from './VideoPanel'
 
 const connectionLabels: Record<Connection, string> = {
   loading: 'Menghubungkan', live: 'Terhubung ke ATCS', unavailable: 'Status tidak tersedia', stale: 'Data tidak mutakhir', paused: 'Pemantauan dijeda',
@@ -35,14 +37,15 @@ export function Monitor({ session, onLogout, signingOut, logoutError }: {
   const approach = config?.approaches.find(a => a.code === selected)
   const traffic = useTraffic('atcs_synthetic', config?.intersection_id, true, session.csrf_token)
   const mayControl = session.operator.permissions.includes('control:operate')
-  const control = useControl(config?.intersection_id, session.csrf_token, mayControl)
+  const adaptive = useAdaptive(Boolean(config))
+  const control = useControl(config?.intersection_id, session.csrf_token, mayControl, adaptive.data?.enabled === true)
   const trafficFrame = verified && traffic.data?.run_id === verified.run_id ? traffic.data : null
   // Lamps and vehicles share one server snapshot whenever the traffic feed is available.
   const live = verified && trafficFrame ? { ...verified, signals: trafficFrame.signals, phase: trafficFrame.phase,
     active_approach: trafficFrame.active_approach, remaining_seconds: trafficFrame.remaining_seconds,
     conflict_area: { ...verified.conflict_area!, state: trafficFrame.conflict } } : verified
   const signals = live?.signals ?? null
-  const vehicles = live && traffic.data?.run_id === live.run_id ? traffic.data.vehicles : []
+  const vehicles = (workspace === 'atcs' || control.status?.source === 'integration_test') && live && traffic.data?.run_id === live.run_id ? traffic.data.vehicles : []
   const selectedSignal = signals?.[selected] ?? 'unknown'
   const filtered = [...journal.events].reverse().filter(event => eventFilter === 'all'
     || (eventFilter === 'phase' ? event.event_type === 'phase_changed' : ['fault', 'recovered', 'clearance_held', 'service_stopped'].includes(event.event_type)))
@@ -73,14 +76,15 @@ export function Monitor({ session, onLogout, signingOut, logoutError }: {
       </div>
       <div className="workspace-switch" role="group" aria-label="Mode ruang kerja">
         <button aria-pressed={workspace === 'atcs'} onClick={() => setWorkspace('atcs')}><strong>ATCS</strong><span>Pengendali utama · kendaraan sintetis</span></button>
-        <button aria-pressed={workspace === 'sigap'} onClick={() => setWorkspace('sigap')}><strong>SIGAP</strong><span>Kesiapan sumber &amp; kendali</span></button>
+        <button aria-pressed={workspace === 'sigap'} onClick={() => setWorkspace('sigap')}><strong>SIGAP</strong><span>Adaptif, sumber &amp; kendali</span></button>
         <button aria-pressed={workspace === 'simulation'} onClick={() => setWorkspace('simulation')}><strong>Simulasi</strong><span>Percobaan arus &amp; EVP</span></button>
       </div>
       {workspace !== 'atcs' && <div className="background-atcs" role="status"><span className="signal-dot" />ATCS utama tetap berjalan · {live?.phase ? `${phaseNames[live.phase]} ${live.active_approach ?? ''} · ${live.remaining_seconds != null ? `${Math.ceil(live.remaining_seconds)} dtk` : 'menunggu konflik'}` : 'status belum terverifikasi'}</div>}
       {control.status?.fallback_code && <p className="connection-note" role="status"><strong>{control.status.state === 'returning_atcs' ? 'Transisi ke ATCS.' : 'Catatan pengendali.'}</strong> {control.status.reason}</p>}
-      {workspace === 'sigap' && <ControlPanel control={control} mayControl={mayControl} />}
+      {workspace === 'sigap' && <><ControlPanel control={control} mayControl={mayControl} allowSynthetic={adaptive.data?.enabled === true} /><AdaptivePanel feed={adaptive} csrf={session.csrf_token} mayControl={mayControl} /></>}
+      <VideoPanel workspace={workspace} csrf={session.csrf_token} mayControl={mayControl} />
       <SimulationWorkspace intersection={config?.intersection_id} csrf={session.csrf_token} active={workspace === 'simulation'} />
-      <div hidden={workspace !== 'atcs'}>
+      <div hidden={workspace === 'simulation'}>
       <div className="simulation-strip"><span className="simulation-mark" aria-hidden="true">A</span><span><strong>{live?.mode ? `${live.controller} · ${modeNames[live.mode]}` : 'Pengendali ATCS'}</strong> · Kendaraan ilustrasi sintetis, bukan CCTV aktual. Belum terhubung ke lampu lapangan.</span><span className="read-only">1× · Terus berjalan</span></div>
       {connection !== 'live' && <div className={`connection-note${connection === 'loading' ? ' is-loading' : ''}`}>
         <strong>{connectionLabels[connection]}.</strong> {connection === 'loading' ? 'Menunggu kondisi pengendali.'
@@ -115,7 +119,8 @@ export function Monitor({ session, onLogout, signingOut, logoutError }: {
             <div className="approach-tabs" role="group" aria-label="Pilih arah pendekat">{directions.map(code => <button key={code} aria-label={`Detail ${directionNames[code]}`} aria-pressed={selected === code} className={selected === code ? 'is-selected' : ''} onClick={() => setSelected(code)}><span>{code}</span><i className={`signal-dot signal-dot--${signals?.[code] ?? 'unknown'}`} /><span className="sr-only">{signalNames[signals?.[code] ?? 'unknown']}</span></button>)}</div>
             <div className="selected-approach"><h3>{directionNames[selected]}</h3><span className={`signal-label signal-label--${selectedSignal}`}>{signalNames[selectedSignal]}</span></div>
             <p className="approach-road">{approach?.road ?? 'Identitas jalan belum tersedia'}</p>
-            <dl className="lane-details"><div><dt>Lajur luar</dt><dd>{approach ? `Lurus ke ${directionNames[approach.outer.straight]} / kiri ke ${directionNames[approach.outer.left]}` : '—'}</dd></div><div><dt>Lajur dalam</dt><dd>{approach ? `Lurus ke ${directionNames[approach.inner.straight]} / kanan ke ${directionNames[approach.inner.right]}` : '—'}</dd></div></dl>
+            <dl className="lane-details"><div><dt>Lajur kiri</dt><dd>{approach ? `Ruas pintas ke ${directionNames[approach.outer.left]}` : '—'}</dd></div><div><dt>Lajur tengah</dt><dd>{approach ? `Lurus ke ${directionNames[approach.middle.straight]}` : '—'}</dd></div><div><dt>Lajur kanan</dt><dd>{approach ? `Belok kanan ke ${directionNames[approach.inner.right]}` : '—'}</dd></div></dl>
+            <p className="small-muted">Mobil memilih lajur di bagian hulu. Menjelang percabangan, ikuti arah lajur; ruas pintas kiri melewati antrean lampu.</p>
             <p className="yield-note"><span aria-hidden="true">▽</span> Kiri lewat ruas pintas; beri jalan saat bergabung.</p>
           </section>
           <div className="telemetry-details"><div><span>Area konflik</span><strong>{live?.conflict_area?.source === 'assumed_clear' ? 'Diasumsikan kosong' : live?.conflict_area ? ({ clear: 'Kosong', occupied: 'Terisi', unknown: 'Tidak diketahui' }[live.conflict_area.state]) : 'Belum diketahui'}</strong></div><div><span>Pembaruan terakhir</span><time>{monitor.receivedAt ? `${localTime(monitor.receivedAt)} WIB${live ? '' : ' · terakhir diterima'}` : '—'}</time></div></div>
@@ -131,7 +136,7 @@ export function Monitor({ session, onLogout, signingOut, logoutError }: {
       </section>
       </div>
       <Readiness snapshot={snapshot} />
-      <footer><span><strong>SIGAP</strong> — Sistem Pengaturan Fase Lampu Adaptif Berbasis CCTV dan Deteksi Kendaraan YOLO.</span><span>Tahap 3 / 4 · Integrasi &amp; fallback</span></footer>
+      <footer><span><strong>SIGAP</strong> — Sistem Pengaturan Fase Lampu Adaptif Berbasis CCTV dan Deteksi Kendaraan YOLO.</span><span>Tahap 5 · Adaptif &amp; video bersama</span></footer>
     </main>
   </>
 }

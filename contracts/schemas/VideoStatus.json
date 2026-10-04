@@ -1,0 +1,203 @@
+{
+  "$defs": {
+    "Point": {
+      "additionalProperties": false,
+      "properties": {
+        "x": {
+          "maximum": 1,
+          "minimum": 0,
+          "title": "X",
+          "type": "number"
+        },
+        "y": {
+          "maximum": 1,
+          "minimum": 0,
+          "title": "Y",
+          "type": "number"
+        }
+      },
+      "required": [
+        "x",
+        "y"
+      ],
+      "title": "Point",
+      "type": "object"
+    },
+    "VideoCalibration": {
+      "additionalProperties": false,
+      "properties": {
+        "lanes": {
+          "additionalProperties": {
+            "items": {
+              "$ref": "#/$defs/Point"
+            },
+            "type": "array"
+          },
+          "maxProperties": 3,
+          "minProperties": 3,
+          "propertyNames": {
+            "enum": [
+              "outer",
+              "middle",
+              "inner"
+            ]
+          },
+          "title": "Lanes",
+          "type": "object"
+        },
+        "stop_line": {
+          "items": {
+            "$ref": "#/$defs/Point"
+          },
+          "maxItems": 2,
+          "minItems": 2,
+          "title": "Stop Line",
+          "type": "array"
+        }
+      },
+      "required": [
+        "lanes",
+        "stop_line"
+      ],
+      "title": "VideoCalibration",
+      "type": "object"
+    },
+    "VideoChannelView": {
+      "additionalProperties": false,
+      "properties": {
+        "direction": {
+          "enum": [
+            "U",
+            "T",
+            "S",
+            "B"
+          ],
+          "title": "Direction",
+          "type": "string"
+        },
+        "source": {
+          "enum": [
+            "none",
+            "recording",
+            "live"
+          ],
+          "title": "Source",
+          "type": "string"
+        },
+        "source_session": {
+          "format": "uuid",
+          "title": "Source Session",
+          "type": "string"
+        },
+        "state": {
+          "enum": [
+            "empty",
+            "ready",
+            "connecting",
+            "playing",
+            "paused",
+            "ended",
+            "error",
+            "stale"
+          ],
+          "title": "State",
+          "type": "string"
+        },
+        "label": {
+          "title": "Label",
+          "type": "string"
+        },
+        "frame_id": {
+          "title": "Frame Id",
+          "type": "integer"
+        },
+        "media_seconds": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Media Seconds"
+        },
+        "frame_age_seconds": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Frame Age Seconds"
+        },
+        "live_configured": {
+          "title": "Live Configured",
+          "type": "boolean"
+        },
+        "detection_ready": {
+          "const": false,
+          "default": false,
+          "title": "Detection Ready",
+          "type": "boolean"
+        },
+        "calibration": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/VideoCalibration"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "message": {
+          "title": "Message",
+          "type": "string"
+        }
+      },
+      "required": [
+        "direction",
+        "source",
+        "source_session",
+        "state",
+        "label",
+        "frame_id",
+        "media_seconds",
+        "frame_age_seconds",
+        "live_configured",
+        "detection_ready",
+        "calibration",
+        "message"
+      ],
+      "title": "VideoChannelView",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "channels": {
+      "items": {
+        "$ref": "#/$defs/VideoChannelView"
+      },
+      "maxItems": 4,
+      "minItems": 4,
+      "title": "Channels",
+      "type": "array"
+    },
+    "preview_fps": {
+      "const": 5,
+      "default": 5,
+      "title": "Preview Fps",
+      "type": "integer"
+    }
+  },
+  "required": [
+    "channels",
+    "preview_fps"
+  ],
+  "title": "VideoStatus",
+  "type": "object"
+}

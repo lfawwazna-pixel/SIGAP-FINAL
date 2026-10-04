@@ -12,12 +12,12 @@ Satu sumber konfigurasi yang digunakan aplikasi berada di `configs/intersection.
 
 ## Geometri dan gerakan
 
-- Empat lengan, lalu lintas sisi kiri, masing-masing dua lajur masuk dan dua lajur keluar, dengan median.
+- Empat lengan, lalu lintas sisi kiri, masing-masing tiga lajur masuk dan tiga lajur keluar, dengan median (revisi sebelum Tahap 5).
 - Empat ruas pintas belok kiri terpisah dengan pulau pemisah. Percabangan berada sebelum garis henti; bergabung kembali setelah simpang.
-- Lajur luar, berwarna biru pada diagram, bercabang menuju ruas pintas kiri atau melanjutkan lurus.
+- Mendekati percabangan, lajur kiri khusus menuju ruas pintas, tengah untuk lurus, kanan untuk belok kanan. Kendaraan boleh mulai dari lajur mana pun, lalu berpindah satu lajur setiap manuver di zona persiapan hulu.
 - Gerakan belok kiri melalui ruas pintas tidak menunggu lampu, tetapi wajib memberi jalan saat bergabung dan tidak boleh menembus kendaraan lain.
-- Gerakan lurus dari lajur luar tetap mengikuti lampu. Warna biru menunjukkan jalur gerak, bukan izin bebas lampu untuk lurus.
-- Lajur dalam melayani lurus dan kanan sesuai fase pendekatnya.
+- Gerakan lurus dari lajur tengah dan belok kanan dari lajur kanan mengikuti lampu. Warna biru menunjukkan jalur gerak, bukan izin bebas lampu untuk lurus.
+- Jarak depan/belakang, reservasi kedua lajur selama perpindahan dan pemeriksaan lintasan gerak mencegah kendaraan saling memotong. Manuver diselesaikan sebelum percabangan; tidak ada pindah lajur di tikungan.
 - Tidak ada putar balik atau perpindahan lajur di tengah simpang. Kendaraan yang sudah masuk menyelesaikan gerakannya; kendaraan baru tidak masuk jika ruang keluar terblokir.
 
 | Asal | Nama jalan | Kiri melalui ruas pintas | Lurus | Kanan |

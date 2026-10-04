@@ -21,8 +21,9 @@ export const localTime = (value: string) => new Intl.DateTimeFormat('id-ID', {
 export function supportedGeometry(config: IntersectionConfig): boolean {
   return directions.every((code, i) => {
     const arm = config.approaches.find(a => a.code === code)
-    return arm?.outer.left === directions[(i + 1) % 4] && arm.outer.straight === directions[(i + 2) % 4]
-      && arm.inner.straight === directions[(i + 2) % 4] && arm.inner.right === directions[(i + 3) % 4]
+    return config.geometry.incoming_lanes_per_approach === 3 && config.geometry.outgoing_lanes_per_approach === 3
+      && arm?.outer.left === directions[(i + 1) % 4] && arm.middle.straight === directions[(i + 2) % 4]
+      && arm.inner.right === directions[(i + 3) % 4]
   })
 }
 

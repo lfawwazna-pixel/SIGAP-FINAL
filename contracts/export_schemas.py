@@ -6,6 +6,8 @@ from pathlib import Path
 from contracts.models import AtcsStatus, Health, IntersectionConfig, SessionView, TrafficEvent, TrafficEvents
 from contracts.traffic import TrafficView
 from contracts.control import ControlStatus, CommandReceipt, OperatorControl, ControlCommand
+from contracts.adaptive import AdaptiveStatus, MeasurementBatch
+from contracts.video import VideoStatus
 
 
 def main():
@@ -15,7 +17,7 @@ def main():
     output = Path(__file__).parent / "schemas"
     output.mkdir(exist_ok=True)
     for model in [AtcsStatus, Health, IntersectionConfig, TrafficEvent, TrafficEvents, SessionView, TrafficView,
-                  ControlStatus, CommandReceipt, OperatorControl, ControlCommand]:
+                  ControlStatus, CommandReceipt, OperatorControl, ControlCommand, AdaptiveStatus, MeasurementBatch, VideoStatus]:
         path = output / f"{model.__name__}.json"
         mode = 'validation' if model in (ControlCommand, OperatorControl) else 'serialization'
         content = json.dumps(model.model_json_schema(mode=mode), ensure_ascii=False, indent=2) + "\n"

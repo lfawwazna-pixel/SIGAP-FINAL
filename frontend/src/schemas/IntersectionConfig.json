@@ -26,6 +26,9 @@
         "outer": {
           "$ref": "#/$defs/OuterLane"
         },
+        "middle": {
+          "$ref": "#/$defs/MiddleLane"
+        },
         "inner": {
           "$ref": "#/$defs/InnerLane"
         }
@@ -35,6 +38,7 @@
         "road",
         "side",
         "outer",
+        "middle",
         "inner"
       ],
       "title": "Approach",
@@ -115,12 +119,12 @@
           "type": "string"
         },
         "incoming_lanes_per_approach": {
-          "const": 2,
+          "const": 3,
           "title": "Incoming Lanes Per Approach",
           "type": "integer"
         },
         "outgoing_lanes_per_approach": {
-          "const": 2,
+          "const": 3,
           "title": "Outgoing Lanes Per Approach",
           "type": "integer"
         },
@@ -202,16 +206,6 @@
     "InnerLane": {
       "additionalProperties": false,
       "properties": {
-        "straight": {
-          "enum": [
-            "U",
-            "T",
-            "S",
-            "B"
-          ],
-          "title": "Straight",
-          "type": "string"
-        },
         "right": {
           "enum": [
             "U",
@@ -224,10 +218,29 @@
         }
       },
       "required": [
-        "straight",
         "right"
       ],
       "title": "InnerLane",
+      "type": "object"
+    },
+    "MiddleLane": {
+      "additionalProperties": false,
+      "properties": {
+        "straight": {
+          "enum": [
+            "U",
+            "T",
+            "S",
+            "B"
+          ],
+          "title": "Straight",
+          "type": "string"
+        }
+      },
+      "required": [
+        "straight"
+      ],
+      "title": "MiddleLane",
       "type": "object"
     },
     "OuterLane": {
@@ -242,21 +255,10 @@
           ],
           "title": "Left",
           "type": "string"
-        },
-        "straight": {
-          "enum": [
-            "U",
-            "T",
-            "S",
-            "B"
-          ],
-          "title": "Straight",
-          "type": "string"
         }
       },
       "required": [
-        "left",
-        "straight"
+        "left"
       ],
       "title": "OuterLane",
       "type": "object"
@@ -305,7 +307,7 @@
   "additionalProperties": false,
   "properties": {
     "schema_version": {
-      "const": "1.0",
+      "const": "2.0",
       "title": "Schema Version",
       "type": "string"
     },

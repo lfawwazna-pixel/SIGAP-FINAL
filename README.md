@@ -2,11 +2,13 @@
 
 **Sistem Pengaturan Fase Lampu Adaptif Berbasis CCTV dan Deteksi Kendaraan YOLO.**
 
-Implementasi lokal sampai **Tahap 3 / 4 — Integrasi SIGAP–ATCS, override dan fallback**. React/TypeScript menampilkan login, monitor, kendali dan ruang simulasi; FastAPI menyediakan autentikasi, adapter operator serta eksperimen per akun; PostgreSQL menyimpan akun/sesi; ATCS beserta kendaraan sintetisnya berjalan sebagai proses mandiri. Sistem ini belum terhubung ke perangkat ATCS lapangan.
+Implementasi lokal sampai **Tahap 5 — Adaptif data buatan dan video bersama ATCS–SIGAP**. React/TypeScript menampilkan login, monitor, kendali dan ruang simulasi; FastAPI menyediakan autentikasi, pengirim keputusan adaptif, decoder video bersama serta eksperimen per akun; PostgreSQL menyimpan akun/sesi; ATCS beserta kendaraan sintetisnya berjalan sebagai proses mandiri. Sistem ini belum terhubung ke perangkat ATCS lapangan.
 
-Yang tersedia: login/logout, akses operator, peta jalan yang diperpanjang, ruas pintas kiri satu mobil, kendaraan/antrean, waktu tetap ATCS, serta eksperimen dengan pause/reset/1×–3×, pengaturan arus, keluaran terblokir, adaptif sintetis dan spawn ambulans/pemadam. Panel SIGAP kini membaca kesiapan sumber, heartbeat, permintaan kendali, tanda terima dan fallback. CCTV/YOLO belum terhubung sehingga aktivasi utama menunggu sumber yang valid. Detail: [Panduan 2E/2F](docs/traffic-simulation.md) dan [integrasi 3/4 serta uji dua proses](docs/control-integration.md).
+Yang tersedia: login/logout, peta tiga lajur dan ruas pintas kiri, kendaraan/antrean, ATCS fixed-time, eksperimen terpisah dengan EVP, keputusan adaptif antrean/tunggu/pemerataan, serta fallback. Video MP4 atau stream kamera terkonfigurasi menggunakan satu sesi per pendekat di tampilan ATCS dan SIGAP, dengan penandaan lajur/garis henti. **YOLO belum dipasang**; kendali Tahap 5 memakai data buatan yang diaktifkan secara eksplisit. Detail terbaru: [Panduan Tahap 5, video, dan evaluasi](docs/stage5-adaptive-video.md). Riwayat: [2E/2F](docs/traffic-simulation.md), [integrasi 3/4](docs/control-integration.md).
 
-ATCS tetap memakai U → T → S → B, hijau 85/150/95/100 detik, kuning 3 detik, semua merah minimum 2 detik, siklus nominal 450 detik. Area konflik kini dibaca dari kendaraan sintetis dan dapat memperpanjang semua merah. Login, logout, pergantian tampilan, reset eksperimen, atau backend berhenti tidak menghentikan proses ATCS. [Rincian ATCS](docs/atcs-fixed-time.md).
+Baseline ATCS memakai U → T → S → B, hijau 85/150/95/100 detik, kuning 3 detik, semua merah minimum 2 detik, siklus nominal 450 detik. Saat SIGAP mengambil alih, ATCS menerapkan fase adaptif; gangguan memicu transisi kembali ke baseline. Area konflik dibaca dari kendaraan sintetis dan dapat memperpanjang semua merah. Login, logout, pergantian tampilan, reset eksperimen, atau backend berhenti tidak menghentikan proses ATCS. [Rincian ATCS](docs/atcs-fixed-time.md).
+
+Revisi sebelum Tahap 5: tiga lajur per pendekat, tujuan dan lajur awal mobil sintetis dipilih terpisah, perpindahan satu/dua lajur bertahap di hulu, lajur kiri khusus ruas pintas dekat simpang, serta EVP masuk dari ujung belakang jalan. [Aturan dan verifikasi redesain](docs/three-lane-redesign.md).
 
 ## Konfigurasi lokal
 
@@ -33,7 +35,9 @@ Konfigurasi utama:
 | POSTGRES_PORT | Port PostgreSQL pada host Docker |
 | SIGAP_ATCS_BASE_URL | Alamat ATCS dari backend |
 | SIGAP_CONTROL_API_KEY | Rahasia acak antarlayanan minimal 32 karakter; kosong menonaktifkan perintah kendali |
-| ATCS_ENABLE_TEST_SOURCE | false pada ATCS utama; lab terpisah mengaktifkannya sendiri |
+| ATCS_ENABLE_TEST_SOURCE / SIGAP_ADAPTIVE_SYNTHETIC | Keduanya true hanya untuk prototipe data buatan Tahap 5; default false |
+| SIGAP_CAMERA_URLS | Pemetaan JSON U/T/S/B ke URL RTSP atau HTTP(S); hanya server |
+| SIGAP_MEDIA_DIR | Direktori unggahan/kalibrasi; default work/media |
 | BACKEND_PROXY_TARGET | Alamat backend dari Vite |
 | VITE_API_BASE_URL | Prefix API publik; default /api; jangan isi rahasia |
 | SIGAP_SESSION_SECONDS | Batas sesi absolut; default 28.800 detik / 8 jam |
@@ -42,7 +46,7 @@ Konfigurasi utama:
 
 Default port: frontend 5173, backend 8000, ATCS 8001, PostgreSQL 5432. Jika port frontend berubah, ubah origin yang diizinkan juga. `FRONTEND_PORT`, `BACKEND_PORT`, dan `ATCS_PORT` mengatur port host Compose; untuk proses lokal ubah argumen `--port` dan URL antar layanan.
 
-Konfigurasi geometri/waktu hanya di `configs/intersection.json`. Path relatif `SIGAP_CONFIG_PATH` dihitung dari root proyek. Perubahan file konfigurasi memerlukan restart backend/ATCS. Simulasi tidak menyamakan skema simetris ini dengan ukuran/rambu lapangan.
+Aturan simpang/waktu di `configs/intersection.json`, geometri peta di `configs/map-geometry.json`, parameter adaptif di `configs/adaptive-policy.json`. Path relatif `SIGAP_CONFIG_PATH` dihitung dari root proyek. Perubahan file konfigurasi memerlukan restart backend/ATCS. Simulasi tidak menyamakan skema simetris ini dengan ukuran/rambu lapangan.
 
 ## Menyiapkan akun operator
 
@@ -79,7 +83,7 @@ Buka tiga terminal dari root proyek:
 **Backend:**
 
 ```powershell
-.\.venv\Scripts\python.exe -m uvicorn backend.app.main:app --host 127.0.0.1 --port 8000 --no-proxy-headers
+.\.venv\Scripts\python.exe -m uvicorn backend.app.main:app --host 127.0.0.1 --port 8000 --workers 1 --no-proxy-headers
 ```
 
 **Frontend:**

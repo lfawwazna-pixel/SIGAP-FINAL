@@ -1,9 +1,23 @@
 /* Generated from contracts/traffic.py. Do not edit manually. */
 
+export type DecidedAt = string;
+export type MeasurementSequence = number;
+export type Approach = ("U" | "T" | "S" | "B") | null;
+export type GreenSeconds = number | null;
+export type Reason = string;
+export type ObservedAt = string;
+export type Usable = boolean;
+export type ControlledCount = number;
+export type QueueCount = number;
+export type OldestWaitSeconds = number;
+export type SlipCount = number;
+export type ExitAvailable = boolean;
+export type RequestId = string | null;
+export type Outcome = "preview" | "accepted" | "applied" | "rejected" | "cancelled";
 export type IntersectionId = string;
 export type Source = "atcs_synthetic" | "experiment";
 export type RunId = string;
-export type ObservedAt = string;
+export type ObservedAt1 = string;
 export type Available = boolean;
 export type TimeSeconds = number;
 export type Running = boolean;
@@ -17,7 +31,7 @@ export type Signals = {
 export type RemainingSeconds = number | null;
 export type Emergency = boolean;
 export type TargetVehicle = number | null;
-export type Reason = string;
+export type Reason1 = string;
 export type BlockedExit = ("U" | "T" | "S" | "B") | null;
 export type Time = number;
 export type Message = string;
@@ -39,6 +53,11 @@ export type Heading = number;
 export type Stopped = boolean;
 export type Served = boolean;
 export type DistanceToStop = number;
+export type Lane = "outer" | "middle" | "inner";
+export type TargetLane = "outer" | "middle" | "inner";
+export type ChangingTo = ("outer" | "middle" | "inner") | null;
+export type StopReason =
+  ("following" | "yielding" | "signal" | "exit_blocked" | "conflict" | "safety_gap" | "stationary") | null;
 /**
  * @maxItems 160
  */
@@ -51,10 +70,11 @@ export type Conflict = "clear" | "occupied" | "unknown";
 export type TrafficSequence = number;
 
 export interface TrafficView {
+  decision: AdaptiveDecision | null;
   intersection_id: IntersectionId;
   source: Source;
   run_id: RunId;
-  observed_at: ObservedAt;
+  observed_at: ObservedAt1;
   available: Available;
   time_seconds: TimeSeconds;
   running: Running;
@@ -66,7 +86,7 @@ export interface TrafficView {
   remaining_seconds: RemainingSeconds;
   emergency: Emergency;
   target_vehicle: TargetVehicle;
-  reason: Reason;
+  reason: Reason1;
   demand: Demand;
   blocked_exit: BlockedExit;
   events: Events;
@@ -79,6 +99,32 @@ export interface TrafficView {
   refused_spawns: RefusedSpawns;
   conflict: Conflict;
   traffic_sequence: TrafficSequence;
+}
+export interface AdaptiveDecision {
+  decided_at: DecidedAt;
+  measurement_sequence: MeasurementSequence;
+  approach: Approach;
+  green_seconds: GreenSeconds;
+  reason: Reason;
+  scores: Scores;
+  inputs: Inputs;
+  request_id: RequestId;
+  outcome: Outcome;
+}
+export interface Scores {
+  [k: string]: number;
+}
+export interface Inputs {
+  [k: string]: ApproachMeasurement;
+}
+export interface ApproachMeasurement {
+  observed_at: ObservedAt;
+  usable: Usable;
+  controlled_count: ControlledCount;
+  queue_count: QueueCount;
+  oldest_wait_seconds: OldestWaitSeconds;
+  slip_count: SlipCount;
+  exit_available: ExitAvailable;
 }
 export interface Demand {
   [k: string]: number;
@@ -98,6 +144,10 @@ export interface VehicleView {
   stopped: Stopped;
   served: Served;
   distance_to_stop: DistanceToStop;
+  lane: Lane;
+  target_lane: TargetLane;
+  changing_to: ChangingTo;
+  stop_reason: StopReason;
 }
 export interface Queues {
   [k: string]: number;

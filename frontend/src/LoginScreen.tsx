@@ -1,34 +1,29 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react'
 import { directions, directionNames, type Direction } from './traffic'
 import { SigapLogo } from './SigapLogo'
+import { JunctionRoad, slipPath } from './JunctionRoad'
+import geometry from './geometry/map-geometry.json'
 
-const destinations: Record<Direction, { road: string; opposite: string; left: string }> = {
-  U: { road: 'Jl. Ibrahim Adjie', opposite: 'Selatan', left: 'Timur' },
-  T: { road: 'Jl. Soekarno Hatta', opposite: 'Barat', left: 'Selatan' },
-  S: { road: 'Jl. Ibrahim Adjie', opposite: 'Utara', left: 'Barat' },
-  B: { road: 'Jl. Soekarno Hatta', opposite: 'Timur', left: 'Utara' },
+const destinations: Record<Direction, { road: string; opposite: string; left: string; right: string }> = {
+  U: { road: 'Jl. Ibrahim Adjie', opposite: 'Selatan', left: 'Timur', right: 'Barat' },
+  T: { road: 'Jl. Soekarno Hatta', opposite: 'Barat', left: 'Selatan', right: 'Utara' },
+  S: { road: 'Jl. Ibrahim Adjie', opposite: 'Utara', left: 'Barat', right: 'Timur' },
+  B: { road: 'Jl. Soekarno Hatta', opposite: 'Timur', left: 'Utara', right: 'Selatan' },
 }
 
 function JunctionIllustration({ direction, busy }: { direction: Direction; busy: boolean }) {
-  return <svg className={`login-junction${busy ? ' is-verifying' : ''}`} viewBox="0 0 640 510" role="img" aria-label={`Ilustrasi rute dari ${directionNames[direction]}; bukan kondisi lampu aktual`}>
-    <defs><marker id="login-route-arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="4" markerHeight="4" orient="auto"><path d="M1 1 L9 5 L1 9" fill="none" stroke="#9dcdf0" strokeWidth="2" /></marker></defs>
-    <path className="login-road" d="M260 36 H380 V195 H600 V315 H380 V474 H260 V315 H40 V195 H260Z" />
-    {directions.map((code, i) => <g key={code} transform={`rotate(${i * 90} 320 255)`}>
-      <path className="login-slip-edge" d="M360 103 C360 165 410 215 472 215" />
-      <path className="login-slip-road" d="M360 103 C360 165 410 215 472 215" />
-      <path className="login-island" d="M387 167 Q400 185 423 187 H387Z" />
-      <path className="login-lane" d="M290 51 V184 M350 51 V184" />
-      <path className="login-median" d="M320 51 V181" />
-      <path className="login-stop" d="M325 187 H374" />
-      <path className="login-lane-arrow" d="M335 129 V151 M330 145 L335 151 L340 145 M280 133 V111 M275 117 L280 111 L285 117" />
-    </g>)}
-    <g className="login-selected-route" transform={`rotate(${directions.indexOf(direction) * 90} 320 255)`}>
-      <path d="M360 70 V441" markerEnd="url(#login-route-arrow)" />
-      <path d="M360 103 C360 165 410 215 472 215 H555" markerEnd="url(#login-route-arrow)" />
-      <circle cx="360" cy="76" r="5" />
+  const { center, start, end, lane_centers: lanes, stop_line: stop } = geometry
+  return <svg className={`login-junction${busy ? ' is-verifying' : ''}`} viewBox="-510 -510 1820 1820" role="img" aria-label={`Ilustrasi rute dari ${directionNames[direction]}; tiga lajur per pendekat, bukan kondisi lampu aktual`}>
+    <desc>Geometri yang sama dengan monitor: tiga lajur masuk dan keluar, empat ruas pintas kiri dan pulau pemisah. Ilustrasi tanpa data lalu lintas langsung.</desc>
+    <defs><marker id="login-route-arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="4" markerHeight="4" orient="auto"><path d="M1 1 L9 5 L1 9" fill="none" stroke="#245fa5" strokeWidth="2" /></marker></defs>
+    <JunctionRoad selected={direction} markerId="login-route-arrow" signs={false} />
+    <g className="login-selected-route" transform={`rotate(${directions.indexOf(direction)*90} ${center} ${center})`}>
+      <path d={`M${lanes.middle} ${start+70} V${end-50}`} markerEnd="url(#login-route-arrow)" />
+      <path d={`M${lanes.inner} ${start+70} V${stop} C${lanes.inner} ${center} ${center} ${lanes.inner} ${stop} ${lanes.inner} H${start+50}`} markerEnd="url(#login-route-arrow)" />
+      <path d={`M${lanes.outer} ${start+70} V${geometry.slip.start[1]} ${slipPath.slice(slipPath.indexOf('C'))} H${end-50}`} markerEnd="url(#login-route-arrow)" />
     </g>
-    <g className="login-map-labels"><text x="320" y="22" textAnchor="middle">U</text><text x="618" y="261" textAnchor="middle">T</text><text x="320" y="499" textAnchor="middle">S</text><text x="22" y="261" textAnchor="middle">B</text></g>
-    <g className="login-map-caption"><text x="48" y="70">KIRCON</text><text x="48" y="91">BANDUNG</text><text x="458" y="438">SKEMA SIMPANG</text><text x="458" y="457">ILUSTRASI</text></g>
+    <g className="login-map-labels"><text x={center} y={start-40} textAnchor="middle">U</text><text x={end+55} y={center+15} textAnchor="middle">T</text><text x={center} y={end+70} textAnchor="middle">S</text><text x={start-55} y={center+15} textAnchor="middle">B</text></g>
+    <g className="login-map-caption"><text x="-340" y="-260">KIRCON</text><text x="-340" y="-205">BANDUNG</text><text x="720" y="1080">3 LAJUR / PENDEKAT</text><text x="720" y="1135">ILUSTRASI SIMPANG</text></g>
   </svg>
 }
 
@@ -65,7 +60,7 @@ export function LoginScreen({ screen, busy, message, onSubmit, onRetry }: {
       <div className="login-explorer">
         <div className="login-explorer-label"><span>JELAJAHI PENDEKAT</span><span aria-hidden="true">↗</span></div>
         <div className="login-directions" role="group" aria-label="Jelajahi ilustrasi pendekat">{directions.map(code => <button key={code} type="button" aria-pressed={direction === code} onClick={() => setDirection(code)}><span>{code}</span>{directionNames[code]}</button>)}</div>
-        <div className="login-route-detail" aria-live="polite"><strong>{selected.road}</strong><span>Dari {directionNames[direction]} · lurus ke {selected.opposite}, ruas pintas kiri ke {selected.left}.</span></div>
+        <div className="login-route-detail" aria-live="polite"><strong>{selected.road}</strong><span>Dari {directionNames[direction]} · lurus ke {selected.opposite}, kanan ke {selected.right}, ruas pintas kiri ke {selected.left}.</span></div>
       </div>
       <div className="login-world-footer"><span>SIMPANG KIRCON / BANDUNG</span><span>SIMULASI LOKAL</span></div>
     </section>

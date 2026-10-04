@@ -13,6 +13,8 @@ from backend.app.auth import AuthService, require_operator, router as auth_route
 from backend.app.settings import Settings
 from backend.app.simulation import Experiments, router as simulation_router
 from backend.app.control import ControlAdapter, router as control_router
+from backend.app.adaptive import AdaptiveSender, router as adaptive_router
+from backend.app.video import VideoHub, router as video_router
 from contracts.configuration import load_config
 from contracts.models import AtcsStatus, Capabilities, Health, IntersectionConfig, TrafficEvents
 from contracts.traffic import TrafficView
@@ -27,9 +29,12 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     async def lifespan(app: FastAPI):
         app.state.atcs_client = httpx.AsyncClient(base_url=settings.sigap_atcs_base_url.rstrip("/"), timeout=3.0)
         await app.state.experiments.start()
+        await app.state.adaptive.start(app.state.atcs_client)
         try:
             yield
         finally:
+            await app.state.video.stop()
+            await app.state.adaptive.stop()
             await app.state.experiments.stop()
             await app.state.atcs_client.aclose()
             if engine is not None:
@@ -43,6 +48,10 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(simulation_router)
     app.state.control = ControlAdapter(settings, config.intersection_id)
     app.include_router(control_router)
+    app.state.adaptive = AdaptiveSender(settings, config.intersection_id)
+    app.include_router(adaptive_router)
+    app.state.video = VideoHub(settings)
+    app.include_router(video_router)
 
     @app.middleware("http")
     async def private_responses(request: Request, call_next):
@@ -61,15 +70,16 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     @app.get("/api/health/live")
     def live():
-        return {"service": "backend", "liveness": "alive", "stage": "4"}
+        return {"service": "backend", "liveness": "alive", "stage": "5"}
 
     @app.get("/api/health", response_model=Health, responses={503: {"model": Health}}, dependencies=[Depends(require_operator)])
     def health():
         database = app.state.database_check()
         ready = database.status == "reachable" and database.schema_status == "current"
-        report = Health(service="backend", stage="4", foundation_ready=ready,
+        report = Health(service="backend", stage="5", foundation_ready=ready,
                         checked_at=datetime.now(timezone.utc), database=database,
                         capabilities=Capabilities(authentication="available" if ready else "unavailable",
+                            cctv='configured' if settings.sigap_camera_urls else 'not_configured',
                             override='available' if ready and len(settings.sigap_control_api_key.get_secret_value()) >= 32 else 'unavailable'))
         return JSONResponse(report.model_dump(mode="json"), status_code=200 if ready else 503)
 

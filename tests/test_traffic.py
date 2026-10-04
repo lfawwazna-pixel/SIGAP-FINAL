@@ -23,7 +23,7 @@ def run(experiment, seconds):
 def test_routes_start_upstream_and_left_destination_is_rotational(direction):
     i = DIRECTIONS.index(direction)
     routes = [r for r in ROUTES.values() if r.origin == direction]
-    assert len(routes) == 4
+    assert len(routes) == 3
     assert all(r.length > 900 for r in routes)
     assert next(r for r in routes if r.movement == 'left').destination == DIRECTIONS[(i+1)%4]
     assert all(math.dist(r.position(0)[:2], (400,400)) > 600 for r in routes)
@@ -62,22 +62,23 @@ def test_left_queue_does_not_yield_to_its_own_followers(direction):
     for _ in range(800):
         world.step(.05, RED)
         for one, two in combinations(world.vehicles, 2):
-            assert math.dist(one.route.position(one.distance)[:2], two.route.position(two.distance)[:2]) >= VEHICLE_LENGTH+GAP-.001
+            assert math.dist(one.position()[:2], two.position()[:2]) >= VEHICLE_LENGTH+GAP-.001
     assert world.completed == len(cars)
     assert not world.vehicles
 
 
-def test_slip_queue_waits_for_main_lane_then_drains_without_deadlock():
+def test_slip_queue_uses_separate_exit_lane_and_drains_beside_main_traffic():
     world = TrafficWorld(demand=0)
     leader = world.spawn('U', movement='left')
     leader.distance = leader.route.gate-VEHICLE_LENGTH/2
     follower = world.spawn('U', movement='left')
     follower.distance = leader.distance-40
-    main = world.spawn('B', movement='straight', lane='outer')
-    main.distance, main.committed = 850, True
+    main = world.spawn('B', movement='straight', lane='middle')
+    main.distance, main.committed = 1080, True
     before = leader.distance
     world.step(.05, RED)
-    assert leader.distance == before
+    assert leader.distance > before
+    assert leader.route.exit_lane != main.route.exit_lane
     advance(world, 40)
     assert world.completed == 3
 
@@ -97,17 +98,19 @@ def test_four_slip_queues_keep_spacing_and_recover_from_a_blocked_exit():
     assert world.completed == 16
 
 
-def test_yield_holds_slip_for_existing_exit_traffic():
+def test_left_slip_cannot_run_into_a_stopped_outgoing_leader():
     world = TrafficWorld(demand=0)
     slip = world.spawn('U', movement='left')
-    slip.distance = slip.route.gate-VEHICLE_LENGTH/2
-    other = world.spawn('B', movement='straight', lane='outer')
-    # B travels east at y=330, into the same outgoing lane as the U slip.
-    other.distance = 810
+    slip.distance = slip.route.exit_start+100
+    slip.committed = True
+    other = world.spawn('U', movement='left')
+    other.distance = slip.distance+VEHICLE_LENGTH+GAP
     other.committed = True
+    other.speed = 0
     before = slip.distance
     world.step(.05, RED)
     assert slip.distance == before
+    other.speed = 48
     advance(world, 25)
     assert world.completed == 2
 
@@ -119,7 +122,7 @@ def test_blocked_exit_prevents_new_entry_then_unblocking_releases():
     advance(world, 20, {**RED, 'U': 'green'})
     assert not car.committed
     world.blocked_exit = None
-    advance(world, 20, {**RED, 'U': 'green'})
+    advance(world, 23, {**RED, 'U': 'green'})
     assert world.completed == 1
 
 
@@ -223,7 +226,7 @@ def test_seed_replay_and_mixed_flow_has_spacing_and_progress():
         b.tick(.05)
         if i % 20 == 0:
             for one, two in combinations(a.world.vehicles, 2):
-                assert math.dist(one.route.position(one.distance)[:2], two.route.position(two.distance)[:2]) >= VEHICLE_LENGTH+GAP-0.001
+                assert math.dist(one.position()[:2], two.position()[:2]) >= VEHICLE_LENGTH+GAP-0.001
             assert a.world.snapshot() == b.world.snapshot()
         if (i+1) % 600 == 0:
             completed.append(a.world.completed)

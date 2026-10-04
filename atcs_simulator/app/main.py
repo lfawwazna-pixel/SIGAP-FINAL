@@ -12,6 +12,8 @@ from contracts.control import ControlCommand, CommandReceipt, ControlStatus
 from contracts.configuration import load_config
 from contracts.models import AtcsStatus, Capabilities, DatabaseCheck, Health, IntersectionConfig, TrafficEvents
 from contracts.traffic import TrafficView
+from contracts.adaptive import MeasurementBatch
+from adaptive.policy import measure_world
 
 
 def create_app(config_path: str | None = None, *, clock: Clock | None = None,
@@ -92,6 +94,15 @@ def create_app(config_path: str | None = None, *, clock: Clock | None = None,
     @app.get('/control', response_model=ControlStatus)
     async def control_status():
         return app.state.runtime.control_status()
+
+    @app.get('/measurements', response_model=MeasurementBatch, dependencies=[Depends(require_service)])
+    async def measurements():
+        runtime = app.state.runtime
+        batch = measure_world(runtime.traffic, config.intersection_id, runtime.engine.run_id, runtime.engine.updated_at)
+        if runtime.status().availability != 'available':
+            for value in batch.approaches.values():
+                value.usable = False
+        return batch
 
     @app.post('/control/commands', response_model=CommandReceipt, dependencies=[Depends(require_service)])
     async def control_command(payload: ControlCommand):

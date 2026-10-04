@@ -1,5 +1,175 @@
 {
   "$defs": {
+    "AdaptiveDecision": {
+      "additionalProperties": false,
+      "properties": {
+        "decided_at": {
+          "format": "date-time",
+          "title": "Decided At",
+          "type": "string"
+        },
+        "measurement_sequence": {
+          "title": "Measurement Sequence",
+          "type": "integer"
+        },
+        "approach": {
+          "anyOf": [
+            {
+              "enum": [
+                "U",
+                "T",
+                "S",
+                "B"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Approach"
+        },
+        "green_seconds": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Green Seconds"
+        },
+        "reason": {
+          "title": "Reason",
+          "type": "string"
+        },
+        "scores": {
+          "additionalProperties": {
+            "type": "number"
+          },
+          "maxProperties": 4,
+          "minProperties": 4,
+          "propertyNames": {
+            "enum": [
+              "U",
+              "T",
+              "S",
+              "B"
+            ]
+          },
+          "title": "Scores",
+          "type": "object"
+        },
+        "inputs": {
+          "additionalProperties": {
+            "$ref": "#/$defs/ApproachMeasurement"
+          },
+          "maxProperties": 4,
+          "minProperties": 4,
+          "propertyNames": {
+            "enum": [
+              "U",
+              "T",
+              "S",
+              "B"
+            ]
+          },
+          "title": "Inputs",
+          "type": "object"
+        },
+        "request_id": {
+          "anyOf": [
+            {
+              "format": "uuid",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Request Id"
+        },
+        "outcome": {
+          "default": "preview",
+          "enum": [
+            "preview",
+            "accepted",
+            "applied",
+            "rejected",
+            "cancelled"
+          ],
+          "title": "Outcome",
+          "type": "string"
+        }
+      },
+      "required": [
+        "decided_at",
+        "measurement_sequence",
+        "approach",
+        "green_seconds",
+        "reason",
+        "scores",
+        "inputs",
+        "request_id",
+        "outcome"
+      ],
+      "title": "AdaptiveDecision",
+      "type": "object"
+    },
+    "ApproachMeasurement": {
+      "additionalProperties": false,
+      "properties": {
+        "observed_at": {
+          "format": "date-time",
+          "title": "Observed At",
+          "type": "string"
+        },
+        "usable": {
+          "title": "Usable",
+          "type": "boolean"
+        },
+        "controlled_count": {
+          "maximum": 10000,
+          "minimum": 0,
+          "title": "Controlled Count",
+          "type": "integer"
+        },
+        "queue_count": {
+          "maximum": 10000,
+          "minimum": 0,
+          "title": "Queue Count",
+          "type": "integer"
+        },
+        "oldest_wait_seconds": {
+          "minimum": 0,
+          "title": "Oldest Wait Seconds",
+          "type": "number"
+        },
+        "slip_count": {
+          "maximum": 10000,
+          "minimum": 0,
+          "title": "Slip Count",
+          "type": "integer"
+        },
+        "exit_available": {
+          "title": "Exit Available",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "observed_at",
+        "usable",
+        "controlled_count",
+        "queue_count",
+        "oldest_wait_seconds",
+        "slip_count",
+        "exit_available"
+      ],
+      "title": "ApproachMeasurement",
+      "type": "object"
+    },
     "ExperimentEvent": {
       "additionalProperties": false,
       "properties": {
@@ -57,14 +227,14 @@
           "type": "string"
         },
         "x": {
-          "maximum": 1020,
-          "minimum": -220,
+          "maximum": 1220,
+          "minimum": -420,
           "title": "X",
           "type": "number"
         },
         "y": {
-          "maximum": 1020,
-          "minimum": -220,
+          "maximum": 1220,
+          "minimum": -420,
           "title": "Y",
           "type": "number"
         },
@@ -86,6 +256,61 @@
           "minimum": 0,
           "title": "Distance To Stop",
           "type": "number"
+        },
+        "lane": {
+          "enum": [
+            "outer",
+            "middle",
+            "inner"
+          ],
+          "title": "Lane",
+          "type": "string"
+        },
+        "target_lane": {
+          "enum": [
+            "outer",
+            "middle",
+            "inner"
+          ],
+          "title": "Target Lane",
+          "type": "string"
+        },
+        "changing_to": {
+          "anyOf": [
+            {
+              "enum": [
+                "outer",
+                "middle",
+                "inner"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Changing To"
+        },
+        "stop_reason": {
+          "anyOf": [
+            {
+              "enum": [
+                "following",
+                "yielding",
+                "signal",
+                "exit_blocked",
+                "conflict",
+                "safety_gap",
+                "stationary"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Stop Reason"
         }
       },
       "required": [
@@ -98,7 +323,11 @@
         "heading",
         "stopped",
         "served",
-        "distance_to_stop"
+        "distance_to_stop",
+        "lane",
+        "target_lane",
+        "changing_to",
+        "stop_reason"
       ],
       "title": "VehicleView",
       "type": "object"
@@ -106,6 +335,17 @@
   },
   "additionalProperties": false,
   "properties": {
+    "decision": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/AdaptiveDecision"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
     "intersection_id": {
       "title": "Intersection Id",
       "type": "string"
@@ -359,6 +599,7 @@
     }
   },
   "required": [
+    "decision",
     "intersection_id",
     "source",
     "run_id",

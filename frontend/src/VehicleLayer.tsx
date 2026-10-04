@@ -9,6 +9,9 @@ export function interpolatePose(from: Pose, to: Pose, progress: number): Pose {
   return { x: from.x + (to.x-from.x)*progress, y: from.y + (to.y-from.y)*progress, heading: from.heading+turn*progress }
 }
 const transform = (pose: Pose) => `translate(${pose.x} ${pose.y})`
+const laneOrder = ['outer', 'middle', 'inner']
+const laneNames = { outer: 'kiri', middle: 'tengah', inner: 'kanan' }
+const stopReasons = { following: 'mengikuti antrean', yielding: 'memberi jalan', signal: 'menunggu lampu', exit_blocked: 'keluaran penuh', conflict: 'menunggu area konflik', safety_gap: 'menjaga jarak aman', stationary: 'kendaraan diam' }
 
 /** Interpolate only SVG user coordinates. Browser zoom changes the common SVG
  * viewport, never a separate CSS-pixel translation or compositor transition. */
@@ -46,11 +49,12 @@ export function VehicleLayer({ vehicles }: { vehicles: TrafficView['vehicles'] }
   return <g className="vehicle-layer" aria-label={`${vehicles.length} kendaraan sintetis pada peta`}>
     {vehicles.map(vehicle => <g key={vehicle.id} className="vehicle-position" transform={transform(vehicle)}
       ref={node => { if (node) nodes.current.set(vehicle.id, node); else nodes.current.delete(vehicle.id) }}>
-      <g transform={`rotate(${vehicle.heading})`} className={`map-vehicle map-vehicle--${vehicle.kind}`} data-vehicle-id={vehicle.id}>
-        <title>{vehicle.kind === 'ambulance' ? 'Ambulans' : vehicle.kind === 'fire_engine' ? 'Pemadam' : 'Mobil'} #{vehicle.id} · dari {directionNames[vehicle.origin]}{vehicle.stopped ? ' · berhenti' : ''}</title>
+      <g transform={`rotate(${vehicle.heading})`} className={`map-vehicle map-vehicle--${vehicle.kind}`} data-vehicle-id={vehicle.id} data-lane={vehicle.lane} data-changing-to={vehicle.changing_to ?? undefined} data-stop-reason={vehicle.stop_reason ?? undefined}>
+        <title>{vehicle.kind === 'ambulance' ? 'Ambulans' : vehicle.kind === 'fire_engine' ? 'Pemadam' : 'Mobil'} #{vehicle.id} · dari {directionNames[vehicle.origin]} · lajur {laneNames[vehicle.lane]}{vehicle.changing_to ? ` · berpindah ke ${laneNames[vehicle.changing_to]}` : ''}{vehicle.stopped ? ` · ${vehicle.stop_reason ? stopReasons[vehicle.stop_reason] : 'berhenti'}` : ''}</title>
         <rect x="-13" y="-9" width="26" height="18" rx="4" /><path className="vehicle-window" d="M5 -6 H9 V6 H5Z" />
         {vehicle.kind === 'ambulance' && <path className="ambulance-cross" d="M-7 0 H1 M-3 -4 V4" />}
         {vehicle.kind === 'fire_engine' && <path className="fire-ladder" d="M-9 -4 H2 V4 H-9Z M-5 -4 V4 M-1 -4 V4" />}
+        {vehicle.changing_to && <path className="vehicle-indicator" d={laneOrder.indexOf(vehicle.changing_to) < laneOrder.indexOf(vehicle.lane) ? 'M5 -10 H11' : 'M5 10 H11'} />}
       </g>{vehicle.kind !== 'car' && <text className="evp-number" x="0" y="-17" textAnchor="middle">#{vehicle.id}</text>}
     </g>)}
   </g>
