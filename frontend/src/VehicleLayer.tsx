@@ -46,7 +46,7 @@ export function VehicleLayer({ vehicles }: { vehicles: TrafficView['vehicles'] }
     return () => cancelAnimationFrame(frame)
   }, [vehicles])
 
-  return <g className="vehicle-layer" aria-label={`${vehicles.length} kendaraan sintetis pada peta`}>
+  return <g className="vehicle-layer" aria-label={`${vehicles.length} kendaraan pada peta`}>
     {vehicles.map(vehicle => <g key={vehicle.id} className="vehicle-position" transform={transform(vehicle)}
       ref={node => { if (node) nodes.current.set(vehicle.id, node); else nodes.current.delete(vehicle.id) }}>
       <g transform={`rotate(${vehicle.heading})`} className={`map-vehicle map-vehicle--${vehicle.kind}`} data-vehicle-id={vehicle.id} data-lane={vehicle.lane} data-changing-to={vehicle.changing_to ?? undefined} data-stop-reason={vehicle.stop_reason ?? undefined}>

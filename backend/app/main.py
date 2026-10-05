@@ -29,12 +29,13 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     async def lifespan(app: FastAPI):
         app.state.atcs_client = httpx.AsyncClient(base_url=settings.sigap_atcs_base_url.rstrip("/"), timeout=3.0)
         await app.state.experiments.start()
+        app.state.video.start()
         await app.state.adaptive.start(app.state.atcs_client)
         try:
             yield
         finally:
-            await app.state.video.stop()
             await app.state.adaptive.stop()
+            await app.state.video.stop()
             await app.state.experiments.stop()
             await app.state.atcs_client.aclose()
             if engine is not None:
@@ -51,6 +52,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.state.adaptive = AdaptiveSender(settings, config.intersection_id)
     app.include_router(adaptive_router)
     app.state.video = VideoHub(settings)
+    app.state.adaptive.video = app.state.video
     app.include_router(video_router)
 
     @app.middleware("http")

@@ -24,6 +24,8 @@ class VideoChannel:
         self.lock = asyncio.Lock()
         self.source = 'none'
         self.session = uuid4()
+        self.tracker_session = uuid4()
+        self.loop_count = 0
         self.state, self.message, self.label = 'empty', 'Pilih rekaman atau kamera.', 'Belum ada sumber'
         self.path = None
         self.frame, self.frame_id, self.received = None, 0, None
@@ -33,6 +35,7 @@ class VideoChannel:
         self.vision = vision
         self.tracking_task = None
         self.tracked_frame = None
+        self.tracked_raw = None
         self.tracked_id = 0
         self.tracked_session = self.session
         self.tracked_at = self.tracked_position = None
@@ -56,6 +59,7 @@ class VideoChannel:
 
     def reset_tracking(self):
         self.tracked_frame = None
+        self.tracked_raw = None
         self.tracked_id = 0
         self.tracked_session = self.session
         self.tracked_at = self.tracked_position = None
@@ -64,10 +68,18 @@ class VideoChannel:
         self.tracking_times.clear()
 
     async def track(self, jpeg, frame_id, session, position, captured):
-        result = await self.vision.infer(self.direction, session, frame_id, jpeg, captured)
-        if result is None or self.session != session or self.state not in ('playing', 'paused'):
+        generation = self.tracker_session
+        def latest():
+            if self.session != session or self.tracker_session != generation or self.state != 'playing' or self.frame is None:
+                return None
+            return self.frame_id, self.frame, self.received, self.position
+        result = await self.vision.infer(self.direction, generation, frame_id, jpeg, captured, latest=latest)
+        if result is None or self.session != session or self.tracker_session != generation or self.state != 'playing':
             return
-        self.tracked_frame, self.tracked_id = result['jpeg'], frame_id
+        self.tracked_frame, self.tracked_id = result['jpeg'], result.get('input_frame_id', frame_id)
+        self.tracked_raw = result.get('input_jpeg', jpeg)
+        captured = result.get('input_captured', captured)
+        position = result.get('input_position', position)
         self.tracked_session, self.tracked_at, self.tracked_position = session, captured, position
         self.tracks, self.device = result['tracks'], result['device']
         if self.tracking_times:
@@ -96,46 +108,59 @@ class VideoChannel:
                 await self.tracking_task
             self.tracking_task = None
 
+    def start(self):
+        if self.source != 'none' and (self.task is None or self.task.done()):
+            self.task = asyncio.create_task(self.decode(), name=f'video-{self.direction}')
+            self.state, self.message = 'connecting', 'Menghubungkan sumber video utama.'
+
     async def decode(self):
         offset = self.position
         decoded = 0
-        self.state, self.message = 'connecting', 'Menghubungkan decoder video.'
-        args = [get_ffmpeg_exe(), '-hide_banner', '-loglevel', 'error', '-nostdin', '-threads', '1']
-        if self.source == 'recording':
-            args += ['-re', '-ss', str(offset), '-protocol_whitelist', 'file,pipe', '-i', str(self.path)]
-        else:
-            if self.live_url.startswith('rtsp://'):
-                args += ['-rtsp_transport', 'tcp']
-            args += ['-i', self.live_url]
-        args += ['-an', '-vf', 'fps=5,scale=640:-2', '-threads', '1', '-f', 'image2pipe', '-c:v', 'mjpeg', '-q:v', '5', 'pipe:1']
         try:
-            kwargs = {'creationflags': subprocess.CREATE_NO_WINDOW} if os.name == 'nt' else {}
-            self.process = await asyncio.create_subprocess_exec(*args, stdout=asyncio.subprocess.PIPE,
-                stderr=asyncio.subprocess.DEVNULL, **kwargs)
-            buffer = b''
             while True:
-                chunk = await asyncio.wait_for(self.process.stdout.read(65536), 15)
-                if not chunk:
-                    code = await self.process.wait()
-                    self.state = 'ended' if self.source == 'recording' and decoded and code == 0 else 'error'
-                    self.message = 'Rekaman selesai; tidak diputar ulang otomatis.' if self.state == 'ended' else 'Video tidak dapat dibaca atau koneksi terputus.'
-                    self.frame = None
-                    return
-                buffer += chunk
-                if len(buffer) > 4_000_000:
-                    raise ValueError('Frame limit exceeded')
-                while (end := buffer.find(b'\xff\xd9')) >= 0:
-                    jpeg, buffer = buffer[:end+2], buffer[end+2:]
-                    if not jpeg.startswith(b'\xff\xd8'):
-                        raise ValueError('Invalid frame')
-                    decoded += 1
-                    self.frame_id += 1
-                    self.frame, self.received = jpeg, time.monotonic()
-                    self.position = offset+decoded/5
-                    self.state, self.message = 'playing', 'Video sumber bersama berjalan.'
-                    if self.vision and self.vision.enabled and (not self.tracking_task or self.tracking_task.done()):
-                        self.tracking_task = asyncio.create_task(self.track(jpeg, self.frame_id, self.session,
-                            self.position, self.received), name=f'tracking-{self.direction}')
+                if self.frame is None:
+                    self.state, self.message = 'connecting', 'Menghubungkan decoder video.'
+                args = [get_ffmpeg_exe(), '-hide_banner', '-loglevel', 'error', '-nostdin', '-threads', '1']
+                if self.source == 'recording':
+                    args += ['-re', '-ss', str(offset), '-protocol_whitelist', 'file,pipe', '-i', str(self.path)]
+                else:
+                    if self.live_url.startswith('rtsp://'):
+                        args += ['-rtsp_transport', 'tcp']
+                    args += ['-i', self.live_url]
+                args += ['-an', '-vf', 'fps=5,scale=640:-2', '-threads', '1', '-f', 'image2pipe', '-c:v', 'mjpeg', '-q:v', '5', 'pipe:1']
+                kwargs = {'creationflags': subprocess.CREATE_NO_WINDOW} if os.name == 'nt' else {}
+                self.process = await asyncio.create_subprocess_exec(*args, stdout=asyncio.subprocess.PIPE,
+                    stderr=asyncio.subprocess.DEVNULL, **kwargs)
+                buffer = b''
+                while True:
+                    chunk = await asyncio.wait_for(self.process.stdout.read(65536), 15)
+                    if not chunk:
+                        code = await self.process.wait()
+                        if self.source == 'recording' and decoded and code == 0:
+                            # Fence old inference/IDs without invalidating an upload or calibration
+                            # already in flight. Source identity changes only when the source changes.
+                            self.tracker_session, self.position = uuid4(), 0
+                            self.loop_count += 1
+                            self.reset_tracking()
+                            offset, decoded = 0, 0
+                            break
+                        self.state, self.message, self.frame = 'error', 'Video tidak dapat dibaca atau koneksi terputus.', None
+                        return
+                    buffer += chunk
+                    if len(buffer) > 4_000_000:
+                        raise ValueError('Frame limit exceeded')
+                    while (end := buffer.find(b'\xff\xd9')) >= 0:
+                        jpeg, buffer = buffer[:end+2], buffer[end+2:]
+                        if not jpeg.startswith(b'\xff\xd8'):
+                            raise ValueError('Invalid frame')
+                        decoded += 1
+                        self.frame_id += 1
+                        self.frame, self.received = jpeg, time.monotonic()
+                        self.position = offset+decoded/5
+                        self.state, self.message = 'playing', 'Video sumber bersama berjalan.'
+                        if self.vision and self.vision.enabled and (not self.tracking_task or self.tracking_task.done()):
+                            self.tracking_task = asyncio.create_task(self.track(jpeg, self.frame_id, self.session,
+                                self.position, self.received), name=f'tracking-{self.direction}')
         except asyncio.CancelledError:
             raise
         except Exception:
@@ -154,13 +179,13 @@ class VideoChannel:
             state=state, label=self.label, frame_id=self.frame_id, media_seconds=self.position if self.source == 'recording' else None,
             frame_age_seconds=age, live_configured=bool(self.live_url), calibration=self.calibration,
             detection_ready=bool(tracking and tracking.state == 'tracking'), tracking=tracking,
-            message='Frame video tidak mutakhir.' if state == 'stale' else self.message)
+            loop_count=self.loop_count, message='Frame video tidak mutakhir.' if state == 'stale' else self.message)
 
     def tracking_view(self):
         if not self.vision:
             return None
         age = max(0, time.monotonic() - self.tracked_at) if self.tracked_at else None
-        fresh = self.tracked_session == self.session and self.state in ('playing', 'paused') and age is not None and (age <= 3 if self.state == 'playing' else self.tracked_id == self.frame_id)
+        fresh = self.tracked_session == self.session and self.state == 'playing' and age is not None and age <= 3
         state = 'disabled' if not self.vision.enabled else 'tracking' if fresh else 'error' if self.vision.retry_after > time.monotonic() else 'stale' if self.tracked_at else 'warming'
         fps = 1000 / (sum(self.processing_times) / len(self.processing_times)) if self.processing_times else None
         times = self.tracking_times
@@ -177,11 +202,37 @@ class VideoHub:
         self.vision = VisionWorker(settings)
         self.channels = {d: VideoChannel(d, directory, settings.sigap_camera_urls.get(d, '').get_secret_value()
             if d in settings.sigap_camera_urls else '', self.vision) for d in 'UTSB'}
+        self.watch_task = None
 
     async def stop(self):
+        if self.watch_task:
+            self.watch_task.cancel()
+            with suppress(asyncio.CancelledError):
+                await self.watch_task
+            self.watch_task = None
         for channel in self.channels.values():
             await channel.stop()
         await self.vision.close()
+
+    def start(self):
+        for channel in self.channels.values():
+            channel.start()
+        if self.watch_task is None or self.watch_task.done():
+            self.watch_task = asyncio.create_task(self.watch_live(), name='video-reconnect')
+
+    async def reconnect_live(self):
+        for channel in self.channels.values():
+            async with channel.lock:
+                if channel.source == 'live' and channel.state in ('error', 'stale') and (not channel.task or channel.task.done()):
+                    channel.tracker_session = uuid4()
+                    channel.frame, channel.received = None, None
+                    channel.reset_tracking()
+                    channel.start()
+
+    async def watch_live(self):
+        while True:
+            await asyncio.sleep(2)
+            await self.reconnect_live()
 
     def snapshot(self):
         return VideoStatus(channels=[c.view() for c in self.channels.values()])
@@ -196,12 +247,14 @@ async def status(request: Request):
 @router.get('/{direction}/frame', dependencies=[Depends(require_operator)])
 async def frame(direction: Direction, request: Request, overlay: bool = False):
     channel = request.app.state.video.channels[direction]
-    if channel.view().state not in ('playing', 'paused') or channel.frame is None:
+    if channel.view().state != 'playing' or channel.frame is None:
         raise error(503, 'FRAME_UNAVAILABLE', channel.view().message)
-    detected = overlay and channel.view().detection_ready and channel.tracked_frame is not None
-    return Response(channel.tracked_frame if detected else channel.frame, media_type='image/jpeg', headers={
-        'X-Source-Session': str(channel.session), 'X-Frame-Id': str(channel.tracked_id if detected else channel.frame_id),
-        'X-Media-Seconds': str(channel.tracked_position if detected else channel.position),
+    matched = channel.view().detection_ready and channel.tracked_frame is not None and channel.tracked_raw is not None
+    detected = overlay and matched
+    jpeg = channel.tracked_frame if detected else channel.tracked_raw if matched else channel.frame
+    return Response(jpeg, media_type='image/jpeg', headers={
+        'X-Source-Session': str(channel.session), 'X-Frame-Id': str(channel.tracked_id if matched else channel.frame_id),
+        'X-Media-Seconds': str(channel.tracked_position if matched else channel.position),
         'X-Tracking': 'ByteTrack' if detected else 'none', 'Cache-Control': 'private, no-store'})
 
 @router.post('/{direction}/upload', response_model=VideoChannelView, dependencies=[Depends(require_mutation)])
@@ -227,12 +280,14 @@ async def upload(direction: Direction, expected_session: UUID, request: Request)
             old = channel.path
             channel.source, channel.path, channel.label = 'recording', target, f'Rekaman {direction}'
             channel.session, channel.frame_id, channel.frame = uuid4(), 0, None
+            channel.tracker_session, channel.loop_count = uuid4(), 0
             channel.reset_tracking()
             channel.position, channel.received, channel.calibration = 0, None, None
-            channel.state, channel.message = 'ready', 'Rekaman siap. Jalankan untuk melihat video.'
+            channel.state, channel.message = 'connecting', 'Rekaman tersimpan; memulai video utama.'
             channel.persist()
             if old and old.parent == channel.directory and old != target:
                 old.unlink(missing_ok=True)
+            channel.start()
         except BaseException:
             if channel.path != target:
                 target.unlink(missing_ok=True)
@@ -250,11 +305,6 @@ async def command(direction: Direction, payload: VideoCommand, request: Request)
                 raise error(409, 'NO_SOURCE', 'Pilih sumber video dahulu.')
             channel.calibration = payload.calibration
             channel.persist()
-        elif payload.action == 'pause':
-            if channel.source != 'recording':
-                raise error(409, 'LIVE_CLOCK', 'Kamera langsung mengikuti waktu sumber.')
-            await channel.stop()
-            channel.state, channel.message = 'paused', 'Rekaman dijeda; pengamatan tidak dianggap data baru.'
         else:
             if payload.action == 'use_live':
                 if not channel.live_url:
@@ -263,6 +313,7 @@ async def command(direction: Direction, payload: VideoCommand, request: Request)
                 old = channel.path
                 channel.source, channel.label, channel.position = 'live', f'CCTV {direction}', 0
                 channel.session, channel.frame_id, channel.frame, channel.calibration = uuid4(), 0, None, None
+                channel.tracker_session, channel.loop_count = uuid4(), 0
                 channel.reset_tracking()
                 channel.path, channel.received = None, None
                 channel.persist()
@@ -270,15 +321,5 @@ async def command(direction: Direction, payload: VideoCommand, request: Request)
                     old.unlink(missing_ok=True)
             elif channel.source == 'none':
                 raise error(409, 'NO_SOURCE', 'Pilih sumber video dahulu.')
-            elif payload.action == 'restart':
-                if channel.source != 'recording':
-                    raise error(409, 'LIVE_CLOCK', 'Kamera langsung tidak dapat diputar ulang.')
-                await channel.stop()
-                channel.position, channel.frame_id, channel.frame = 0, 0, None
-                channel.received = None
-                channel.session = uuid4()
-                channel.reset_tracking()
-            if channel.task is None or channel.task.done():
-                channel.task = asyncio.create_task(channel.decode(), name=f'video-{direction}')
-                channel.state = 'connecting'
+            channel.start()
     return channel.view()

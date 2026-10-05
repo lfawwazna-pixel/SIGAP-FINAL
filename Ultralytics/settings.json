@@ -1,0 +1,19 @@
+{
+  "settings_version": "0.0.8",
+  "datasets_dir": "C:\\Users\\Muhammad Luthfi Fawwazna\\Project\\datasets",
+  "weights_dir": "C:\\Users\\Muhammad Luthfi Fawwazna\\Project\\PROJECT-SIGAP-ASTRA\\weights",
+  "runs_dir": "C:\\Users\\Muhammad Luthfi Fawwazna\\Project\\PROJECT-SIGAP-ASTRA\\runs",
+  "uuid": "e0946ca8621e2c66d50c29f62707ccdf5437c7fefbf5bda8816469c711fda6e2",
+  "sync": true,
+  "api_key": "",
+  "openai_api_key": "",
+  "clearml": true,
+  "comet": true,
+  "dvc": true,
+  "mlflow": true,
+  "raytune": true,
+  "tensorboard": false,
+  "wandb": false,
+  "vscode_msg": true,
+  "openvino_msg": true
+}

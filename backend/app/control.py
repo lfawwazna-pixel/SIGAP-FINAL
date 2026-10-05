@@ -116,4 +116,7 @@ async def command(payload: OperatorControl, request: Request, principal: Princip
     if not re.fullmatch(r'[a-f0-9]{64}', supplied) or not hmac.compare_digest(supplied, csrf_token(request.cookies.get(COOKIE_NAME, ''))):
         raise error(403, 'CSRF_REJECTED', 'Sesi halaman berubah. Muat ulang sebelum memberi perintah.')
     result = await request.app.state.control.submit(request.app.state.atcs_client, payload, principal.operator.id)
+    if result.outcome in ('accepted', 'applied') and request.app.state.adaptive.video_mode:
+        request.app.state.adaptive.auto_resume = payload.action == 'activate'
+        request.app.state.adaptive.held = payload.action == 'release'
     return JSONResponse(result.model_dump(mode='json'), status_code=409 if result.outcome == 'rejected' else 200)

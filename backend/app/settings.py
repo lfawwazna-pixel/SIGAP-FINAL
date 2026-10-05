@@ -17,6 +17,7 @@ class Settings(BaseSettings):
     sigap_control_api_key: SecretStr = SecretStr("")
     sigap_config_path: str = "configs/intersection.json"
     sigap_adaptive_synthetic: bool = False
+    sigap_adaptive_video: bool = True
     sigap_media_dir: str = str(PROJECT_ROOT / 'work' / 'media')
     sigap_camera_urls: dict[str, SecretStr] = {}
     sigap_yolo_enabled: bool = False

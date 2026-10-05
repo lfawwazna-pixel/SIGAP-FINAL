@@ -62,6 +62,7 @@ class VideoChannelView(Contract):
     state: Literal['empty', 'ready', 'connecting', 'playing', 'paused', 'ended', 'error', 'stale']
     label: str
     frame_id: int
+    loop_count: int = Field(default=0, ge=0)
     media_seconds: float | None
     frame_age_seconds: float | None
     live_configured: bool
@@ -78,7 +79,7 @@ class VideoStatus(Contract):
 
 class VideoCommand(Contract):
     expected_session: UUID
-    action: Literal['play', 'pause', 'restart', 'use_live', 'calibrate']
+    action: Literal['use_live', 'calibrate']
     calibration: VideoCalibration | None = None
 
     @model_validator(mode='after')

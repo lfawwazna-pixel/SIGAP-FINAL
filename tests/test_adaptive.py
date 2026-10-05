@@ -163,8 +163,10 @@ def test_adaptive_endpoints_require_auth_csrf_and_explicit_enable(auth_context):
     view = login(client).json()
     assert client.get('/api/adaptive').json()['status'] == 'disabled'
     assert client.post('/api/adaptive/fault', headers=ORIGIN, json={'fault': 'none'}).status_code == 403
+    assert client.post('/api/adaptive/hold', headers=ORIGIN, json={}).status_code == 403
     headers = {**ORIGIN, 'X-CSRF-Token': view['csrf_token']}
     assert client.post('/api/adaptive/fault', headers=headers, json={'fault': 'none'}).status_code == 409
+    assert client.post('/api/adaptive/hold', headers=headers, json={}).status_code == 409
     app.state.adaptive.enabled = True
     assert client.post('/api/adaptive/fault', headers=headers, json={'fault': 'frozen_data'}).status_code == 200
     assert client.post('/api/adaptive/fault', headers=headers, json={'fault': 'none', 'extra': True}).status_code == 422

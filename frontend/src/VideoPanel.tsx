@@ -32,6 +32,7 @@ export function VideoPanel({ workspace, csrf, mayControl }: { workspace: 'atcs'|
   const [points, setPoints] = useState(empty)
   const channel = feed.data?.channels.find(v => v.direction === direction)
   const session = channel?.source_session
+  useEffect(() => { setEditing(false); setPoints(empty()) }, [direction, session])
   const playState = channel?.state
   const frameVisible = playState === 'playing' || playState === 'paused'
   const currentUrl = useRef('')
@@ -87,7 +88,7 @@ export function VideoPanel({ workspace, csrf, mayControl }: { workspace: 'atcs'|
     if (!file || !channel || pending) return
     if (file.size > 256*1024*1024) { setMessage('Ukuran video maksimal 256 MB.'); return }
     setPending(true)
-    try { await postService(`/video/${direction}/upload?expected_session=${channel.source_session}`, csrf, file, true); feed.refresh(); setMessage('Rekaman tersimpan. Jalankan video, lalu tandai lajur bila diperlukan.') }
+    try { await postService(`/video/${direction}/upload?expected_session=${channel.source_session}`, csrf, file, true); feed.refresh(); setMessage('Rekaman utama tersimpan dan langsung berjalan. Tandai lajur bila diperlukan.') }
     catch (e) { setMessage(e instanceof Error ? e.message : 'Unggah gagal.') }
     finally { setPending(false) }
   }
@@ -106,17 +107,16 @@ export function VideoPanel({ workspace, csrf, mayControl }: { workspace: 'atcs'|
         }}>{(Object.keys(draw) as Target[]).map(k => <g key={k}>{k === 'stop_line' ? <polyline points={draw[k].map(p => `${p.x*1000},${p.y*1000}`).join(' ')} fill="none" stroke={colors[k]} strokeWidth="4" /> : <polygon points={draw[k].map(p => `${p.x*1000},${p.y*1000}`).join(' ')} fill={colors[k]} fillOpacity=".13" stroke={colors[k]} strokeWidth="3" />}{draw[k].map((p,i) => <circle key={i} cx={p.x*1000} cy={p.y*1000} r="5" fill={colors[k]} />)}</g>)}</svg></> : <div className="video-empty"><strong>{channel ? stateNames[channel.state] : 'Memeriksa sumber video'}</strong><p>{feed.error || channel?.message || 'Belum menerima status sumber.'}</p></div>}
       </div>
       <div className="video-caption"><span>{channel?.label || 'Belum ada video'} · {channel ? stateNames[channel.state] : 'Belum tersedia'}</span><span>{channel?.source === 'recording' ? `${frameSeconds ? Number(frameSeconds).toFixed(1) : '—'} dtk · ` : ''}Frame {frameKey || '—'}</span></div>
-      {workspace === 'sigap' && <div className="video-detection-note" role="status"><strong>{trackedFrame && channel?.detection_ready ? `YOLO26s + ByteTrack · ${channel.tracking?.tracks.length ?? 0} kendaraan` : channel?.tracking?.state === 'disabled' || !channel?.tracking ? 'YOLO belum diaktifkan' : 'Video asli · tracking belum tersedia'}</strong><p>{channel?.tracking?.message || 'Video tampil tanpa deteksi.'}</p>{channel?.detection_ready && <p>Tracking kamera: {channel.tracking?.observed_fps?.toFixed(1) ?? '—'} FPS · Pemrosesan: {channel.tracking?.processing_fps?.toFixed(1) ?? '—'} FPS · {channel.tracking?.device === 'cpu' ? 'CPU' : 'GPU'}</p>}<p>Pratinjau maksimal 5 FPS. Deteksi video belum mengatur lampu; mode adaptif Tahap 5 tetap memakai data buatan.</p></div>}
+      {workspace === 'sigap' && <div className="video-detection-note" role="status"><strong>{trackedFrame && channel?.detection_ready ? `YOLO26s + ByteTrack · ${channel.tracking?.tracks.length ?? 0} kendaraan` : channel?.tracking?.state === 'disabled' || !channel?.tracking ? 'YOLO belum diaktifkan' : 'Video asli · tracking belum tersedia'}</strong><p>{channel?.tracking?.message || 'Video tampil tanpa deteksi.'}</p>{channel?.detection_ready && <p>Tracking kamera: {channel.tracking?.observed_fps?.toFixed(1) ?? '—'} FPS · Pemrosesan: {channel.tracking?.processing_fps?.toFixed(1) ?? '—'} FPS · {channel.tracking?.device === 'cpu' ? 'CPU' : 'GPU'}</p>}<p>Pratinjau maksimal 5 FPS. Kalibrasi empat pendekat diperlukan sebelum kendali SIGAP diaktifkan.</p></div>}
     </div><div className="video-settings">
       <h3>Atur sumber {directionNames[direction]}</h3>
       <label>Unggah rekaman MP4<input aria-label="Unggah rekaman MP4" type="file" accept="video/mp4,.mp4" disabled={!channel || pending || !mayControl} onChange={e => { void upload(e.target.files?.[0]); e.target.value = '' }} /></label>
-      <p className="small-muted">Maksimal 256 MB. Pratinjau 5 fps tanpa audio. Sumber baru mengganti video dan penandaan pendekat ini.</p>
+      <p className="small-muted">Maksimal 256 MB. Rekaman berjalan otomatis dan berulang terus; pratinjau 5 FPS tanpa audio. Sumber baru mengganti video serta penandaan pendekat ini.</p>
       <button disabled={!channel?.live_configured || pending || !mayControl} onClick={() => void send('use_live')}>Hubungkan CCTV langsung</button>
       {!channel?.live_configured && <p className="small-muted">Alamat kamera langsung belum tersedia.</p>}
-      <div className="video-actions"><button disabled={!channel || channel.source === 'none' || pending || !mayControl || channel.state === 'playing'} onClick={() => void send('play')}>Jalankan video</button><button disabled={channel?.source !== 'recording' || pending || !mayControl} onClick={() => void send('pause')}>Jeda rekaman</button><button disabled={channel?.source !== 'recording' || pending || !mayControl} onClick={() => void send('restart')}>Ulang rekaman</button></div>
-      <p className="small-muted">Kontrol ini hanya mengatur sumber video bersama. Kendali lampu diatur terpisah.</p>
+      <p className="small-muted">Sumber tersimpan aktif otomatis setelah restart. ATCS menampilkan video asli; SIGAP menampilkan tracking dari frame yang sama.</p>
       <button disabled={!url || pending || !mayControl} onClick={() => { setPoints(calibrationPoints(channel?.calibration)); setEditing(v => !v) }}>{editing ? 'Batal penandaan' : 'Tandai lajur & garis henti'}</button>
-      {editing && <div className="calibration-tools"><label>Area yang ditandai<select value={target} onChange={e => setTarget(e.target.value as Target)}>{Object.entries(names).map(([k,v]) => <option key={k} value={k}>{v}</option>)}</select></label><p>Klik 3–12 titik mengelilingi tiap lajur; garis henti cukup 2 titik. Gunakan rekaman yang dijeda agar mudah menandai.</p><button onClick={() => setPoints(old => ({ ...old, [target]: [] }))}>Hapus titik area ini</button><button disabled={!canSave || pending} onClick={() => void send('calibrate', { lanes: { outer:points.outer, middle:points.middle, inner:points.inner }, stop_line:[points.stop_line[0], points.stop_line[1]] })}>Simpan penandaan</button><p className="small-muted">Ini batas area pengamatan. Pemetaan ke koordinat peta/meter dan tracking masuk tahap berikutnya.</p></div>}
+      {editing && <div className="calibration-tools"><label>Area yang ditandai<select value={target} onChange={e => setTarget(e.target.value as Target)}>{Object.entries(names).map(([k,v]) => <option key={k} value={k}>{v}</option>)}</select></label><p>Klik 3–12 titik mengelilingi tiap lajur masuk sebelum garis henti, tanpa tumpang tindih; garis henti cukup 2 titik. Kiri untuk ruas pintas, tengah lurus, kanan belok kanan. Kalibrasi berlaku untuk seluruh putaran rekaman.</p><button onClick={() => setPoints(old => ({ ...old, [target]: [] }))}>Hapus titik area ini</button><button disabled={!canSave || pending} onClick={() => void send('calibrate', { lanes: { outer:points.outer, middle:points.middle, inner:points.inner }, stop_line:[points.stop_line[0], points.stop_line[1]] })}>Simpan penandaan</button><p className="small-muted">Titik bawah kotak kendaraan dipakai untuk menentukan lajur, estimasi antrean, dan posisi skematis pada peta. Kalibrasi tidak mengukur jarak lapangan.</p></div>}
       <p role="status">{pending ? 'Memproses…' : message}</p>
     </div></div>
   </section>

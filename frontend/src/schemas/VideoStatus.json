@@ -250,6 +250,12 @@
           "title": "Frame Id",
           "type": "integer"
         },
+        "loop_count": {
+          "default": 0,
+          "minimum": 0,
+          "title": "Loop Count",
+          "type": "integer"
+        },
         "media_seconds": {
           "anyOf": [
             {
@@ -314,6 +320,7 @@
         "state",
         "label",
         "frame_id",
+        "loop_count",
         "media_seconds",
         "frame_age_seconds",
         "live_configured",

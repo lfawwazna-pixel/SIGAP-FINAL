@@ -31,10 +31,16 @@ class VisionWorker:
                 process.kill()
                 await process.wait()
 
-    async def infer(self, direction, session, frame_id, jpeg, captured=None):
+    async def infer(self, direction, session, frame_id, jpeg, captured=None, latest=None):
         if not self.enabled or time.monotonic() < self.retry_after:
             return None
         async with self.lock:
+            position = None
+            if latest is not None:
+                sample = latest()
+                if sample is None:
+                    return None
+                frame_id, jpeg, captured, position = sample
             if time.monotonic() < self.retry_after or (captured is not None and time.monotonic() - captured > 3):
                 return None
             try:
@@ -62,6 +68,8 @@ class VisionWorker:
                 if not result['jpeg'].startswith(b'\xff\xd8'):
                     raise ValueError('Hasil frame tidak valid.')
                 self.message = 'YOLO + ByteTrack berjalan.'
+                result.update(input_jpeg=jpeg, input_frame_id=frame_id,
+                              input_captured=captured, input_position=position)
                 return result
             except asyncio.CancelledError:
                 await self.close()

@@ -11,7 +11,7 @@ const eventLabels: Record<string, string> = { SOURCE_READY: 'Sumber siap', SOURC
   ENGINE_STOPPED: 'Pengendali berhenti' }
 const seconds = (value: number | null | undefined) => value == null ? 'Belum ada' : `${value.toFixed(1)} dtk`
 
-export function ControlPanel({ control, mayControl, allowSynthetic = false }: { control: ReturnType<typeof useControl>; mayControl: boolean; allowSynthetic?: boolean }) {
+export function ControlPanel({ control, mayControl, allowSynthetic = false, autoResume = false }: { control: ReturnType<typeof useControl>; mayControl: boolean; allowSynthetic?: boolean; autoResume?: boolean }) {
   const { status, error, receipt, commandError, pending, command } = control
   const synthetic = allowSynthetic && status?.allow_test_source && status.source === 'integration_test'
   const canActivate = Boolean(status?.ready && (status.source === 'cctv' || synthetic) && status.state === 'fixed_time' && mayControl && !pending)
@@ -25,7 +25,7 @@ export function ControlPanel({ control, mayControl, allowSynthetic = false }: { 
         <p className="control-readiness">{status?.readiness_reason || 'Kesiapan sumber belum terverifikasi.'}</p>
         <div className="control-actions"><button disabled={!canActivate} onClick={() => void command('activate')}>{synthetic ? 'Aktifkan SIGAP dengan data buatan' : 'Aktifkan kendali SIGAP'}</button><button className="secondary" disabled={!canRelease} onClick={() => void command('release')}>Kembalikan ke ATCS</button></div>
         {!mayControl && <p>Akun ini hanya memiliki akses pemantauan.</p>}
-        <p className="control-caption">Setelah gangguan, sumber harus pulih dan operator mengaktifkan SIGAP kembali. Berpindah tab tidak mengubah kendali.</p>
+        <p className="control-caption">{autoResume ? 'SIGAP akan mengambil alih kembali setelah empat sumber pulih. Kembalikan ke ATCS untuk menghentikan pemulihan otomatis.' : 'Aktivasi pertama memerlukan operator dan empat sumber yang siap.'} Berpindah tab tidak mengubah kendali.</p>
       </div>
       <dl className="control-facts"><div><dt>Sumber keputusan</dt><dd>{status?.source === 'integration_test' ? 'Data buatan Tahap 5' : status?.source === 'cctv' ? 'Layanan CCTV' : 'Belum terhubung'}</dd></div>
         <div><dt>Heartbeat tersisa</dt><dd>{seconds(status?.heartbeat_remaining_seconds)}</dd></div><div><dt>Kesegaran data tersisa</dt><dd>{seconds(status?.data_remaining_seconds)}</dd></div>

@@ -17,7 +17,7 @@ beforeEach(() => {
   frameSession = runId
   posts = []
   state = {preview_fps:5,channels:(['U','T','S','B'] as const).map(direction => ({direction,source:'recording',
-    source_session:runId,state:'playing',label:`Rekaman ${direction}`,frame_id:12,media_seconds:2.4,
+    source_session:runId,state:'playing',label:`Rekaman ${direction}`,frame_id:12,loop_count:0,media_seconds:2.4,
     frame_age_seconds:0,live_configured:false,detection_ready:false,tracking:null,calibration:null,message:'Video rekaman, YOLO belum tersedia.'})) as VideoStatus['channels']}
   vi.stubGlobal('fetch',vi.fn(async (url: string, init?: RequestInit) => {
     if (init?.method === 'POST') {
@@ -80,11 +80,13 @@ it('discards a frame from an old source and clears stale video', async () => {
 
 it('uses guarded commands and locks mutations for monitor-only accounts', async () => {
   const view = render(panel('atcs',false)); await flush()
-  expect((screen.getByRole('button',{name:'Jeda rekaman'}) as HTMLButtonElement).disabled).toBe(true)
+  expect(screen.queryByRole('button',{name:'Jeda rekaman'})).toBeNull()
+  expect(screen.queryByRole('button',{name:'Ulang rekaman'})).toBeNull()
+  expect(screen.queryByRole('button',{name:'Jalankan video'})).toBeNull()
   expect((screen.getByLabelText('Unggah rekaman MP4') as HTMLInputElement).disabled).toBe(true)
   view.rerender(panel('atcs'))
-  fireEvent.click(screen.getByRole('button',{name:'Jeda rekaman'})); await flush()
-  expect(posts).toEqual([{action:'pause',expected_session:runId}])
-  const call = vi.mocked(fetch).mock.calls.find(([,init])=>init?.method === 'POST')!
-  expect(new Headers(call[1]?.headers).get('X-CSRF-Token')).toBe('a'.repeat(64))
+  expect((screen.getByLabelText('Unggah rekaman MP4') as HTMLInputElement).disabled).toBe(false)
+  fireEvent.click(screen.getByRole('button',{name:'Tandai lajur & garis henti'})); await flush()
+  expect(screen.getByRole('button',{name:'Simpan penandaan'})).toBeTruthy()
+  expect(posts).toEqual([])
 })

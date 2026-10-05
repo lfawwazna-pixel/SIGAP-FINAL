@@ -13,11 +13,18 @@ from backend.app.mutations import require_mutation
 from contracts.adaptive import AdaptiveStatus, MeasurementBatch
 from contracts.control import ControlCommand, CommandReceipt, ControlStatus
 from contracts.models import Contract
+from backend.app.measurements import VideoMeasurements
 
 
 class AdaptiveSender:
     def __init__(self, settings, intersection):
-        self.enabled = settings.sigap_adaptive_synthetic
+        self.video_mode = settings.sigap_yolo_enabled and settings.sigap_adaptive_video
+        self.enabled = self.video_mode or settings.sigap_adaptive_synthetic
+        self.video = None
+        self.video_measurements = VideoMeasurements(intersection)
+        self.auto_resume = False
+        self.held = False
+        self.lock = asyncio.Lock()
         self.headers = {'Authorization': 'Bearer '+settings.sigap_control_api_key.get_secret_value()}
         self.intersection = intersection
         self.sender = uuid4()
@@ -37,7 +44,7 @@ class AdaptiveSender:
     async def start(self, client):
         self.client = client
         if self.enabled:
-            self.task = asyncio.create_task(self.run(), name='sigap-adaptive-synthetic')
+            self.task = asyncio.create_task(self.run(), name='sigap-adaptive')
 
     async def stop(self):
         if self.task:
@@ -47,9 +54,11 @@ class AdaptiveSender:
 
     async def command(self, status, action, **fields):
         at = datetime.now(timezone.utc)
-        self.sequences[action] += 1
+        if action in self.sequences:
+            self.sequences[action] += 1
+            fields['sequence'] = self.sequences[action]
         cmd = ControlCommand(request_id=uuid4(), atcs_run_id=status.atcs_run_id, sender_id=self.sender,
-            action=action, sequence=self.sequences[action], issued_at=at, expires_at=at+timedelta(seconds=3), **fields)
+            action=action, issued_at=at, expires_at=at+timedelta(seconds=3), **fields)
         r = await self.client.post('/control/commands', headers=self.headers, json=cmd.model_dump(mode='json', exclude_none=True))
         if r.status_code not in (200, 409):
             r.raise_for_status()
@@ -59,14 +68,31 @@ class AdaptiveSender:
         return receipt
 
     async def cycle(self):
+        async with self.lock:
+            await self._cycle()
+
+    async def hold(self):
+        async with self.lock:
+            self.auto_resume, self.held = False, True
+            # Stop renewing control even if the release cannot be delivered.
+            # ATCS then expires the heartbeat independently.
+            try:
+                r = await self.client.get('/control'); r.raise_for_status()
+                status = ControlStatus.model_validate(r.json())
+                if status.sender_id == self.sender and status.session_id:
+                    await self.command(status, 'release', session_id=status.session_id, expected_revision=status.revision)
+            except Exception:
+                self.state, self.message = 'unavailable', 'Pemulihan otomatis dibatalkan. ATCS memantau pelepasan kendali.'
+
+    async def _cycle(self):
         if self.fault == 'sender_stopped':
             self.state, self.message = 'unavailable', 'Uji pengirim berhenti: heartbeat dan pengamatan dihentikan.'
             self.batch = self.preview = None
             return
         r = await self.client.get('/control'); r.raise_for_status()
         status = ControlStatus.model_validate(r.json())
-        if not status.available or not status.allow_test_source or status.intersection_id != self.intersection:
-            raise ValueError('ATCS belum mengizinkan data buatan atau statusnya tidak tersedia.')
+        if not status.available or (not self.video_mode and not status.allow_test_source) or status.intersection_id != self.intersection:
+            raise ValueError('ATCS belum mengizinkan sumber atau statusnya tidak tersedia.')
         if status.atcs_run_id != self.run_id:
             self.run_id = status.atcs_run_id
             self.policy = AdaptivePolicy()
@@ -78,10 +104,13 @@ class AdaptiveSender:
             self.frozen = None
             self.last_measurement = None
             self.decisions = []
-        r = await self.client.get('/measurements', headers=self.headers); r.raise_for_status()
-        batch = MeasurementBatch.model_validate(r.json())
-        if batch.source != 'synthetic' or batch.source_session != self.run_id or batch.intersection_id != self.intersection:
-            raise ValueError('Identitas sumber pengukuran tidak cocok.')
+        if self.video_mode:
+            batch = self.video_measurements.snapshot(self.video)
+        else:
+            r = await self.client.get('/measurements', headers=self.headers); r.raise_for_status()
+            batch = MeasurementBatch.model_validate(r.json())
+            if batch.source != 'synthetic' or batch.source_session != self.run_id or batch.intersection_id != self.intersection:
+                raise ValueError('Identitas sumber pengukuran tidak cocok.')
         if self.last_measurement is not None:
             if batch.sequence < self.last_measurement.sequence:
                 raise ValueError('Urutan pengukuran mundur.')
@@ -97,7 +126,7 @@ class AdaptiveSender:
         if self.fault == 'invalid_data':
             batch.approaches['U'].usable = False
         self.batch = batch
-        receipt = await self.command(status, 'observe', source='integration_test', observations={d: dict(
+        receipt = await self.command(status, 'observe', source='cctv' if self.video_mode else 'integration_test', observations={d: dict(
             observed_at=v.observed_at, usable=v.usable) for d,v in batch.approaches.items()})
         if receipt.outcome == 'rejected':
             raise ValueError(receipt.message)
@@ -115,9 +144,15 @@ class AdaptiveSender:
                 decision.outcome = 'cancelled'
         self.preview = self.policy.choose(batch, now, at)
         self.state = 'active' if status.state == 'adaptive' and status.sender_id == self.sender else 'ready' if status.ready else 'unavailable'
-        self.message = 'Adaptif menggunakan data buatan; bukan deteksi video.' if status.ready else status.readiness_reason
+        self.message = ('SIGAP mengambil alih kendali berdasarkan YOLO + ByteTrack.' if self.state == 'active'
+            else 'Empat pendekat siap; aktifkan kendali SIGAP.' if self.video_mode else 'Adaptif menggunakan data buatan; bukan deteksi video.') if status.ready else status.readiness_reason
+        if self.held:
+            return
+        if self.video_mode and self.auto_resume and status.ready and status.state == 'fixed_time' and status.sender_id == self.sender:
+            await self.command(status, 'activate', expected_revision=status.revision)
+            return
         if status.sender_id != self.sender or not status.session_id:
-            return  # Acquisition always requires an explicit operator action.
+            return  # First acquisition requires operator activation; video recovery may resume.
         await self.command(status, 'heartbeat', session_id=status.session_id)
         if not status.ready or self.preview.approach is None or status.pending_request_id:
             return
@@ -147,9 +182,14 @@ class AdaptiveSender:
             await asyncio.sleep(.5)
 
     def snapshot(self):
-        return AdaptiveStatus(enabled=self.enabled, source='synthetic', fault=self.fault, status=self.state,
+        provider = self.video_measurements
+        source = self.batch.source if self.video_mode and self.batch else 'recording' if self.video_mode else 'synthetic'
+        return AdaptiveStatus(enabled=self.enabled, source=source, fault=self.fault, status=self.state,
             message=self.message, policy=self.policy.config, measurements=self.batch,
-            decisions=([self.preview] if self.preview else [])+list(reversed(self.decisions)))
+            decisions=([self.preview] if self.preview else [])+list(reversed(self.decisions)),
+            auto_resume=self.auto_resume, source_sessions=provider.source_sessions if self.video_mode else {},
+            issues=provider.issues if self.video_mode else {},
+            map_vehicles=provider.vehicles if self.video_mode and self.batch else [])
 
 
 class FaultInput(Contract):
@@ -165,9 +205,18 @@ async def status(request: Request):
 @router.post('/fault', response_model=AdaptiveStatus, dependencies=[Depends(require_mutation)])
 async def fault(payload: FaultInput, request: Request):
     sender = request.app.state.adaptive
-    if not sender.enabled:
+    if not sender.enabled or sender.video_mode:
         raise error(409, 'SYNTHETIC_DISABLED', 'Uji data buatan belum diaktifkan.')
     sender.fault = payload.fault
     if payload.fault != 'frozen_data':
         sender.frozen = None
+    return sender.snapshot()
+
+
+@router.post('/hold', response_model=AdaptiveStatus, dependencies=[Depends(require_mutation)])
+async def hold(request: Request):
+    sender = request.app.state.adaptive
+    if not sender.enabled or not sender.video_mode:
+        raise error(409, 'VIDEO_CONTROL_DISABLED', 'Kendali dari video belum diaktifkan.')
+    await sender.hold()
     return sender.snapshot()

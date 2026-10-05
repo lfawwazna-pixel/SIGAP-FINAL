@@ -28,13 +28,22 @@ export function AdaptivePanel({ feed, csrf, mayControl }: { feed: ReturnType<typ
     catch (e) { setMessage(e instanceof Error ? e.message : 'Permintaan gagal.') }
     finally { setPending(false) }
   }
-  return <section className="adaptive-panel" aria-label="Keputusan adaptif data buatan">
-    <div className="section-toolbar"><div><p className="eyebrow">TAHAP 5 / DATA BUATAN</p><h2>Dasar keputusan adaptif</h2><p>{feed.error || value?.message || 'Memeriksa layanan keputusan…'}</p></div><span className="environment-tag">Sumber sintetis</span></div>
+  async function hold() {
+    setPending(true)
+    try { await postService('/adaptive/hold', csrf, {}); feed.refresh(); setMessage('Pemulihan otomatis dibatalkan; ATCS memeriksa transisi pelepasan kendali.') }
+    catch (e) { setMessage(e instanceof Error ? e.message : 'Permintaan gagal.') }
+    finally { setPending(false) }
+  }
+  const video = value?.source !== 'synthetic'
+  return <section className="adaptive-panel" aria-label="Keputusan adaptif">
+    <div className="section-toolbar"><div><p className="eyebrow">{video ? 'YOLO + BYTETRACK / KENDALI ADAPTIF' : 'TAHAP 5 / DATA BUATAN'}</p><h2>Dasar keputusan adaptif</h2><p>{feed.error || value?.message || 'Memeriksa layanan keputusan…'}</p></div><span className="environment-tag">{value?.source === 'cctv' ? 'CCTV langsung' : video ? 'Video rekaman' : 'Sumber sintetis'}</span></div>
+    {video && value && <><p className="map-rule">{value.status === 'active' ? 'SIGAP aktif: ATCS mengikuti keputusan video.' : 'SIGAP belum mengambil alih; ATCS menjalankan fase dasarnya.'} Antrean dan waktu tunggu merupakan estimasi gerak di gambar. Keluaran diasumsikan terbuka; klip EVP belum diverifikasi.</p>{Object.entries(value.issues).map(([d, issue]) => <p className="history-note" key={d}>{directionNames[d as keyof typeof directionNames]}: {issue}</p>)}</>}
+    {video && value?.auto_resume && <div className="control-actions"><button disabled={pending || !mayControl} onClick={() => void hold()}>Batalkan pemulihan otomatis</button><p role="status">{message}</p></div>}
     <DecisionTable decision={value?.decisions.find(d => d.outcome === 'preview')} dataTimeout={value?.policy.data_timeout} />
     {value && <p className="map-rule">Hijau {value.policy.minimum_green}–{value.policy.maximum_green} detik. Target usia pelayanan {value.policy.service_age_target} detik; dapat tertunda oleh konflik, keluaran penuh, atau EVP. Ruas pintas tidak menambah kebutuhan hijau.</p>}
-    <div className="adaptive-fault"><label>Uji kesehatan pengirim<select value={value?.fault ?? 'none'} disabled={!value?.enabled || pending || !mayControl} onChange={e => void fault(e.target.value)}>
+    {!video && <div className="adaptive-fault"><label>Uji kesehatan pengirim<select value={value?.fault ?? 'none'} disabled={!value?.enabled || pending || !mayControl} onChange={e => void fault(e.target.value)}>
       <option value="none">Normal</option><option value="frozen_data">Data membeku, heartbeat hidup</option><option value="invalid_data">Data Utara tidak valid</option><option value="sender_stopped">Pengirim berhenti</option>
-    </select></label><p role="status">{message}</p></div>
+    </select></label><p role="status">{message}</p></div>}
     <details className="decision-history"><summary>Riwayat keputusan ({value?.decisions.filter(d => d.outcome !== 'preview').length ?? 0})</summary>
       <div className="table-scroll"><table className="event-table"><thead><tr><th>Waktu</th><th>Arah / durasi</th><th>Status</th><th>Alasan</th></tr></thead><tbody>{value?.decisions.filter(d => d.outcome !== 'preview').map(d => <tr key={d.request_id}><td>{localTime(d.decided_at)}</td><td>{d.approach} / {d.green_seconds} dtk</td><td>{({accepted:'Menunggu',applied:'Diterapkan',rejected:'Ditolak',cancelled:'Dibatalkan',preview:'Pratinjau'})[d.outcome]}</td><td>{d.reason}</td></tr>)}</tbody></table></div>
     </details>

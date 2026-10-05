@@ -4,7 +4,7 @@
 
 Implementasi lokal mencakup **Tahap 5** serta **deteksi dan tracking video Tahap 6**. React/TypeScript menampilkan login, monitor, kendali dan ruang simulasi; FastAPI menyediakan autentikasi, pengirim keputusan adaptif, decoder video bersama serta eksperimen per akun; PostgreSQL menyimpan akun/sesi; ATCS beserta kendaraan sintetisnya berjalan sebagai proses mandiri. Sistem ini belum terhubung ke perangkat ATCS lapangan.
 
-Yang tersedia: login/logout, peta tiga lajur dan ruas pintas kiri, kendaraan/antrean, ATCS fixed-time, eksperimen terpisah dengan EVP, keputusan adaptif antrean/tunggu/pemerataan, serta fallback. Video MP4 atau stream kamera terkonfigurasi menggunakan satu sesi per pendekat di tampilan ATCS dan SIGAP, dengan penandaan lajur/garis henti. **YOLO26s + ByteTrack dapat diaktifkan di SIGAP**; ATCS menampilkan video asli dari sesi yang sama. Inferensi memakai proses Python terpisah. Kendali Tahap 5 masih memakai data buatan; pengukuran antrean/tunggu dari video dan kendali berbasis AI belum terhubung. [Pemasangan dan hasil tracking Tahap 6](docs/stage6-tracking.md). Riwayat: [Tahap 5](docs/stage5-adaptive-video.md), [2E/2F](docs/traffic-simulation.md), [integrasi 3/4](docs/control-integration.md).
+Yang tersedia: login/logout, peta tiga lajur dan ruas pintas kiri, kendaraan/antrean, ATCS fixed-time, eksperimen terpisah dengan EVP, keputusan adaptif antrean/tunggu/pemerataan, serta fallback. Rekaman utama tersimpan per pendekat, berjalan otomatis dan looping. Upload baru langsung menjadi sumber default. **YOLO26s + ByteTrack memakai decoder bersama**; ATCS mengambil frame asli yang sama dengan frame ber-overlay SIGAP. Setelah empat pendekat dikalibrasi, estimasi antrean/tunggu dari video menjadi input adaptif, dan kendaraan diproyeksikan ke peta secara skematis. Aktivasi pertama tetap oleh operator; sesudah gangguan, sumber sehat dapat memperoleh kendali kembali sampai operator meminta ATCS. [Cara memakai video dan kendali](docs/video-control.md). [Pemasangan dan hasil tracking Tahap 6](docs/stage6-tracking.md). Riwayat: [Tahap 5](docs/stage5-adaptive-video.md), [2E/2F](docs/traffic-simulation.md), [integrasi 3/4](docs/control-integration.md).
 
 Baseline ATCS memakai U → T → S → B, hijau 85/150/95/100 detik, kuning 3 detik, semua merah minimum 2 detik, siklus nominal 450 detik. Saat SIGAP mengambil alih, ATCS menerapkan fase adaptif; gangguan memicu transisi kembali ke baseline. Area konflik dibaca dari kendaraan sintetis dan dapat memperpanjang semua merah. Login, logout, pergantian tampilan, reset eksperimen, atau backend berhenti tidak menghentikan proses ATCS. [Rincian ATCS](docs/atcs-fixed-time.md).
 
@@ -38,6 +38,7 @@ Konfigurasi utama:
 | ATCS_ENABLE_TEST_SOURCE / SIGAP_ADAPTIVE_SYNTHETIC | Keduanya true hanya untuk prototipe data buatan Tahap 5; default false |
 | SIGAP_CAMERA_URLS | Pemetaan JSON U/T/S/B ke URL RTSP atau HTTP(S); hanya server |
 | SIGAP_MEDIA_DIR | Direktori unggahan/kalibrasi; default work/media |
+| SIGAP_ADAPTIVE_VIDEO | true secara default; ketika YOLO aktif, gunakan pengukuran video dan abaikan pengirim sintetis |
 | BACKEND_PROXY_TARGET | Alamat backend dari Vite |
 | VITE_API_BASE_URL | Prefix API publik; default /api; jangan isi rahasia |
 | SIGAP_SESSION_SECONDS | Batas sesi absolut; default 28.800 detik / 8 jam |
@@ -173,4 +174,4 @@ Tes menerapkan migrasi, membandingkan ORM, membuat akun pengujian unik, menguji 
 - [Integrasi dan fallback 3/4](docs/control-integration.md)
 - [Verifikasi 3/4](docs/verification-34.md)
 
-Implementasi berhenti di **Tahap 3/4**. Berikutnya **5 — Adaptif dengan data buatan** melalui protokol yang sudah tersedia. Pengirim lab 3/4 bersifat terprogram untuk menguji integrasi; heuristik adaptif/EVP sekarang masih berada di eksperimen 2F. CCTV/YOLO, keputusan operasional dari video dan deployment belum dibuat. Pemeriksaan visual browser masih tertunda karena pengaturan izin Browser Use tersimpan.
+Tahap 5 dan pipeline tracking Tahap 6 tersedia; integrasi video ke keputusan adaptif telah disiapkan. Kalibrasi dan validasi pengukuran pada video utama diperlukan sebelum hasilnya dinyatakan akurat. Uji klip ambulans/pemadam, pemicu EVP dari video, integrasi perangkat lapangan, serta evaluasi eksperimen lengkap masih terpisah.

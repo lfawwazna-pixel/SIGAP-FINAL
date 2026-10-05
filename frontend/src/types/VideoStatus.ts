@@ -11,6 +11,7 @@ export type SourceSession = string;
 export type State = "empty" | "ready" | "connecting" | "playing" | "paused" | "ended" | "error" | "stale";
 export type Label = string;
 export type FrameId = number;
+export type LoopCount = number;
 export type MediaSeconds = number | null;
 export type FrameAgeSeconds = number | null;
 export type LiveConfigured = boolean;
@@ -53,6 +54,7 @@ export interface VideoChannelView {
   state: State;
   label: Label;
   frame_id: FrameId;
+  loop_count: LoopCount;
   media_seconds: MediaSeconds;
   frame_age_seconds: FrameAgeSeconds;
   live_configured: LiveConfigured;

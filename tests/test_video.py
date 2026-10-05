@@ -45,7 +45,7 @@ def test_video_auth_csrf_source_guards_and_calibration(video_context):
     response = client.post(query, headers=headers, content=mp4)
     assert response.status_code == 200
     state = response.json()
-    assert state['state'] == 'ready' and state['source'] == 'recording'
+    assert state['state'] == 'connecting' and state['source'] == 'recording'
     assert client.post(query, headers=headers, content=mp4).status_code == 409
     command = dict(expected_session=state['source_session'], action='calibrate', calibration=calibration())
     assert client.post('/api/video/U/commands', headers=headers, json=command).status_code == 200
@@ -78,7 +78,7 @@ def test_shared_frame_identity_stale_and_session_revocation(video_context):
     assert client.get('/api/video').json()['channels'][0]['state'] == 'stale'
     assert client.get('/api/video/U/frame').status_code == 503
     channel.state = 'paused'; channel.source = 'recording'
-    assert client.get('/api/video/U/frame').status_code == 200  # clearly labelled paused recording
+    assert client.get('/api/video/U/frame').status_code == 503
     client.post('/api/auth/logout', headers={**ORIGIN,'X-CSRF-Token':csrf})
     assert client.get('/api/video/U/frame').status_code == 401
 
@@ -94,33 +94,68 @@ def test_live_persistence_never_relabels_old_recording_or_exposes_url(tmp_path):
     assert VideoChannel('U', tmp_path).source == 'none'
 
 
+def test_live_reconnect_preserves_calibration_and_fences_tracker(tmp_path):
+    async def scenario():
+        hub = VideoHub(Settings(_env_file=None, sigap_media_dir=str(tmp_path)))
+        channel = hub.channels['U']
+        channel.source, channel.state = 'live', 'error'
+        channel.calibration = VideoCalibration.model_validate(calibration())
+        session, tracker = channel.session, channel.tracker_session
+        async def decode():
+            channel.state = 'playing'
+            await asyncio.Event().wait()
+        channel.decode = decode
+        await hub.reconnect_live()
+        await asyncio.sleep(0)
+        assert channel.state == 'playing' and not channel.task.done()
+        assert channel.session == session and channel.tracker_session != tracker
+        assert channel.calibration == VideoCalibration.model_validate(calibration())
+        task = channel.task
+        await hub.reconnect_live()
+        assert channel.task is task  # Never start a second decoder while connected.
+        await hub.stop()
+    asyncio.run(scenario())
+
+
 @pytest.mark.parametrize('mapping', [{'X':'https://example.com/camera'}, {'U':'file:///secret'}, {'T':'https:///missing'}])
 def test_camera_configuration_rejects_invalid_sources(mapping):
     with pytest.raises(ValidationError):
         Settings(_env_file=None, sigap_camera_urls=mapping)
 
 
-def test_real_ffmpeg_decoder_pause_resume_and_end(tmp_path):
+def test_real_ffmpeg_autostart_loop_and_persisted_default(tmp_path):
     path = tmp_path/'fixture.mp4'
     subprocess.run([get_ffmpeg_exe(), '-hide_banner','-loglevel','error','-f','lavfi','-i',
         'testsrc2=size=320x180:rate=10','-t','3','-c:v','libx264','-pix_fmt','yuv420p',str(path)],
         check=True, timeout=20, capture_output=True)
     async def scenario():
         channel = VideoChannel('U', tmp_path)
-        channel.source, channel.path = 'recording', path
+        channel.source, channel.path, channel.label = 'recording', path, 'Video utama'
+        channel.calibration = VideoCalibration.model_validate(calibration())
+        channel.persist()
+        channel = VideoChannel('U', tmp_path)
+        assert channel.path == path and channel.label == 'Video utama'
         session = channel.session
-        channel.task = asyncio.create_task(channel.decode())
-        for _ in range(100):
-            if channel.frame_id >= 3:
+        tracker = channel.tracker_session
+        channel.start()
+        for _ in range(180):
+            if channel.loop_count >= 1 and channel.frame_id >= 18:
                 break
             await asyncio.sleep(.05)
-        assert channel.frame and channel.frame.startswith(b'\xff\xd8')
+        assert channel.state == 'playing' and channel.frame.startswith(b'\xff\xd8')
+        assert channel.loop_count >= 1 and channel.frame_id >= 18
+        assert channel.session == session and channel.tracker_session != tracker
+        assert channel.calibration == VideoCalibration.model_validate(calibration())
+        assert not channel.task.done()
         await channel.stop()
         assert channel.process is None
-        position, frame_id = channel.position, channel.frame_id
-        assert 0 < position < 3 and channel.session == session
-        channel.task = asyncio.create_task(channel.decode())
-        await asyncio.wait_for(channel.task, 12)
-        assert channel.state == 'ended' and channel.process is None and channel.frame is None
-        assert channel.frame_id > frame_id and channel.position > position and channel.session == session
     asyncio.run(scenario())
+
+
+@pytest.mark.parametrize('action', ['play', 'pause', 'restart'])
+def test_retired_playback_commands_are_rejected(video_context, action):
+    client, app = video_context
+    csrf = login(client).json()['csrf_token']
+    response = client.post('/api/video/U/commands', headers={**ORIGIN, 'X-CSRF-Token':csrf},
+        json=dict(expected_session=str(app.state.video.channels['U'].session), action=action))
+    assert response.status_code == 422

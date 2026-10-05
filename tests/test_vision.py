@@ -20,11 +20,14 @@ def test_overlay_uses_its_own_frame_and_falls_back_when_stale(video_context):
     channel.frame, channel.frame_id, channel.received = b'\xff\xd8raw\xff\xd9', 20, time.monotonic()
     channel.position = 4
     channel.tracked_frame, channel.tracked_id = b'\xff\xd8tracked\xff\xd9', 19
+    channel.tracked_raw = b'\xff\xd8matchedraw\xff\xd9'
     channel.tracked_at, channel.tracked_position = time.monotonic(), 3.8
     channel.tracks = [TrackedVehicle(track_id=1, class_name='car', confidence=.8, bbox=[.1,.1,.4,.4])]
     raw = client.get('/api/video/U/frame?overlay=false')
     tracked = client.get('/api/video/U/frame?overlay=true')
-    assert raw.content == channel.frame and raw.headers['x-tracking'] == 'none'
+    assert raw.content == channel.tracked_raw and raw.headers['x-tracking'] == 'none'
+    assert raw.headers['x-frame-id'] == tracked.headers['x-frame-id'] == '19'
+    assert raw.headers['x-media-seconds'] == tracked.headers['x-media-seconds'] == '3.8'
     assert tracked.content == channel.tracked_frame and tracked.headers['x-tracking'] == 'ByteTrack'
     assert tracked.headers['x-frame-id'] == '19' and tracked.headers['x-media-seconds'] == '3.8'
     assert tracked.headers['x-source-session'] == raw.headers['x-source-session']
@@ -40,13 +43,43 @@ def test_result_finishing_after_source_change_is_discarded(tmp_path):
     async def scenario():
         channel = VideoChannel('U', tmp_path)
         session = channel.session
-        async def infer(*args):
+        async def infer(*args, **kwargs):
             channel.session = uuid4()
             return dict(jpeg=b'old', tracks=[], device='cpu', processing_ms=100)
         channel.vision = SimpleNamespace(infer=infer)
         channel.state = 'playing'
         await channel.track(b'frame', 1, session, .2, time.monotonic())
         assert channel.tracked_frame is None
+    asyncio.run(scenario())
+
+
+def test_worker_samples_latest_frame_after_waiting_instead_of_processing_old_input(tmp_path):
+    import base64
+    import json
+    async def scenario():
+        model = tmp_path/'model.pt'
+        model.touch()
+        worker = VisionWorker(Settings(_env_file=None, sigap_yolo_enabled=True, sigap_yolo_model=str(model)))
+        session = uuid4()
+        fresh = time.monotonic()
+        written = []
+        class Input:
+            def write(self, data):
+                written.append(json.loads(data))
+            async def drain(self):
+                pass
+        class Output:
+            async def readline(self):
+                return json.dumps(dict(direction='U',session=str(session),frame_id=7,tracks=[],device='cpu',
+                    processing_ms=100,jpeg=base64.b64encode(b'\xff\xd8overlay\xff\xd9').decode())).encode()
+        worker.process = SimpleNamespace(returncode=None,stdin=Input(),stdout=Output())
+        result = await worker.infer('U',session,1,b'old',fresh-4,
+            latest=lambda:(7,b'new',fresh,1.4))
+        assert written[0]['frame_id'] == result['input_frame_id'] == 7
+        assert result['input_jpeg'] == b'new' and result['input_captured'] == fresh
+        assert result['input_position'] == 1.4
+        assert await worker.infer('U',session,8,b'old',latest=lambda:None) is None
+        assert len(written) == 1
     asyncio.run(scenario())
 
 

@@ -3,6 +3,7 @@ from typing import Literal
 from uuid import UUID
 from pydantic import AwareDatetime, Field, model_validator
 from contracts.models import Contract, Direction
+from contracts.vehicles import VehicleView
 
 
 class ApproachMeasurement(Contract):
@@ -66,10 +67,14 @@ class AdaptiveDecision(Contract):
 
 class AdaptiveStatus(Contract):
     enabled: bool
-    source: Literal['synthetic']
+    source: Literal['synthetic', 'recording', 'cctv']
     fault: Literal['none', 'frozen_data', 'invalid_data', 'sender_stopped']
     status: Literal['disabled', 'ready', 'active', 'unavailable']
     message: str
     policy: AdaptivePolicyConfig
     measurements: MeasurementBatch | None
     decisions: list[AdaptiveDecision]
+    auto_resume: bool = False
+    source_sessions: dict[Direction, UUID] = Field(default_factory=dict)
+    issues: dict[Direction, str] = Field(default_factory=dict)
+    map_vehicles: list[VehicleView] = Field(default_factory=list)
