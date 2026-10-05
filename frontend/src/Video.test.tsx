@@ -18,14 +18,14 @@ beforeEach(() => {
   posts = []
   state = {preview_fps:5,channels:(['U','T','S','B'] as const).map(direction => ({direction,source:'recording',
     source_session:runId,state:'playing',label:`Rekaman ${direction}`,frame_id:12,media_seconds:2.4,
-    frame_age_seconds:0,live_configured:false,detection_ready:false,calibration:null,message:'Video rekaman, YOLO belum tersedia.'})) as VideoStatus['channels']}
+    frame_age_seconds:0,live_configured:false,detection_ready:false,tracking:null,calibration:null,message:'Video rekaman, YOLO belum tersedia.'})) as VideoStatus['channels']}
   vi.stubGlobal('fetch',vi.fn(async (url: string, init?: RequestInit) => {
     if (init?.method === 'POST') {
       const body = JSON.parse(init.body as string); posts.push(body)
       return respond(state.channels[0])
     }
     if (url.endsWith('/video')) return respond(state)
-    return new Response(new Blob(['jpeg'],{type:'image/jpeg'}),{headers:{'Content-Type':'image/jpeg','X-Source-Session':frameSession,'X-Frame-Id':'12'}})
+    return new Response(new Blob(['jpeg'],{type:'image/jpeg'}),{headers:{'Content-Type':'image/jpeg','X-Source-Session':frameSession,'X-Frame-Id':'12','X-Media-Seconds':'2.4','X-Tracking':url.includes('overlay=true') && state.channels[0].detection_ready ? 'ByteTrack' : 'none'}})
   }))
 })
 afterEach(() => {cleanup();vi.useRealTimers();vi.unstubAllGlobals();vi.restoreAllMocks()})
@@ -34,14 +34,30 @@ it('keeps the same video element/session across ATCS SIGAP and simulation withou
   const view = render(panel('atcs'))
   await flush()
   const video = screen.getByAltText('Video pendekat Utara')
-  expect(screen.queryByText(/YOLO belum terpasang/)).toBeNull()
+  expect(screen.queryByText(/YOLO belum diaktifkan/)).toBeNull()
   view.rerender(panel('sigap')); await flush(250)
   expect(screen.getByAltText('Video pendekat Utara')).toBe(video)
-  expect(screen.getByText(/YOLO belum terpasang/)).toBeTruthy()
+  expect(screen.getByText(/YOLO belum diaktifkan/)).toBeTruthy()
   expect(screen.getByText('Frame 12',{exact:false})).toBeTruthy()
   view.rerender(panel('simulation')); await flush(250)
   view.rerender(panel('atcs')); await flush(250)
   expect(screen.getByAltText('Video pendekat Utara')).toBe(video)
+  expect(posts).toHaveLength(0)
+})
+
+it('requests tracked frames only in SIGAP, displays measured FPS and retains the shared session', async () => {
+  state.channels[0].detection_ready = true
+  state.channels[0].tracking = {state:'tracking',source_session:runId,frame_id:12,age_seconds:0,
+    processing_fps:8.5,observed_fps:4.8,device:'cpu',message:'YOLO + ByteTrack berjalan.',
+    tracks:[{track_id:1,class_name:'car',confidence:.8,bbox:[.1,.1,.4,.4]}]}
+  const view = render(panel('sigap')); await flush()
+  const img = screen.getByAltText('Video pendekat Utara')
+  expect(screen.getByText(/ByteTrack · 1 kendaraan/)).toBeTruthy()
+  expect(screen.getByText(/4.8 FPS · Pemrosesan: 8.5 FPS · CPU/)).toBeTruthy()
+  expect(vi.mocked(fetch).mock.calls.some(([url]) => String(url).endsWith('frame?overlay=true'))).toBe(true)
+  view.rerender(panel('atcs')); await flush(250)
+  expect(screen.getByAltText('Video pendekat Utara')).toBe(img)
+  expect(vi.mocked(fetch).mock.calls.some(([url]) => String(url).endsWith('frame?overlay=false'))).toBe(true)
   expect(posts).toHaveLength(0)
 })
 

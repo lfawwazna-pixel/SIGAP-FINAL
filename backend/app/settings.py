@@ -19,6 +19,9 @@ class Settings(BaseSettings):
     sigap_adaptive_synthetic: bool = False
     sigap_media_dir: str = str(PROJECT_ROOT / 'work' / 'media')
     sigap_camera_urls: dict[str, SecretStr] = {}
+    sigap_yolo_enabled: bool = False
+    sigap_yolo_model: str = str(PROJECT_ROOT / 'models' / 'sigap_yolo26s' / 'best.pt')
+    sigap_vision_python: str = ''
     sigap_session_seconds: int = Field(default=28800, ge=60, le=86400)
     sigap_cookie_secure: bool = False  # Local HTTP only; HTTPS deployments must enable this.
     sigap_allowed_origins: list[str] = ["http://127.0.0.1:5173", "http://localhost:5173"]

@@ -37,8 +37,12 @@
           "type": "string"
         },
         "ai": {
-          "const": "not_implemented",
           "default": "not_implemented",
+          "enum": [
+            "not_implemented",
+            "available",
+            "unavailable"
+          ],
           "title": "Ai",
           "type": "string"
         },

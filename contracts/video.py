@@ -29,6 +29,32 @@ class VideoCalibration(Contract):
         return self
 
 
+class TrackedVehicle(Contract):
+    track_id: int = Field(ge=1)
+    class_name: Literal['car', 'motorcycle', 'bus', 'truck', 'ambulance', 'fire_truck']
+    confidence: float = Field(ge=0, le=1, allow_inf_nan=False)
+    bbox: list[float] = Field(min_length=4, max_length=4)
+
+    @model_validator(mode='after')
+    def valid_box(self):
+        x1, y1, x2, y2 = self.bbox
+        if not all(0 <= x <= 1 for x in self.bbox) or x2 < x1 or y2 < y1:
+            raise ValueError('Invalid normalized bounding box')
+        return self
+
+
+class TrackingView(Contract):
+    state: Literal['disabled', 'warming', 'tracking', 'stale', 'error']
+    source_session: UUID
+    frame_id: int = Field(ge=0)
+    age_seconds: float | None
+    processing_fps: float | None
+    observed_fps: float | None
+    device: str | None
+    tracks: list[TrackedVehicle]
+    message: str
+
+
 class VideoChannelView(Contract):
     direction: Direction
     source: Literal['none', 'recording', 'live']
@@ -39,7 +65,8 @@ class VideoChannelView(Contract):
     media_seconds: float | None
     frame_age_seconds: float | None
     live_configured: bool
-    detection_ready: Literal[False] = False
+    detection_ready: bool = False
+    tracking: TrackingView | None = None
     calibration: VideoCalibration | None
     message: str
 

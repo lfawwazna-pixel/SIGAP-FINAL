@@ -11,7 +11,7 @@ export type SchemaStatus = "current" | "missing_or_outdated" | "unknown" | "not_
 export type PhaseEngine = "not_implemented" | "not_hosted" | "running" | "faulted" | "stopped" | "stalled";
 export type Authentication = "not_implemented" | "available" | "unavailable";
 export type Override = "not_implemented" | "available" | "unavailable";
-export type Ai = "not_implemented";
+export type Ai = "not_implemented" | "available" | "unavailable";
 export type Cctv = "not_configured" | "configured";
 
 export interface Health {

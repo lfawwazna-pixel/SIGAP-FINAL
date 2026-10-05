@@ -79,6 +79,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         report = Health(service="backend", stage="5", foundation_ready=ready,
                         checked_at=datetime.now(timezone.utc), database=database,
                         capabilities=Capabilities(authentication="available" if ready else "unavailable",
+                            ai='available' if any(c.view().detection_ready for c in app.state.video.channels.values()) else 'unavailable' if settings.sigap_yolo_enabled else 'not_implemented',
                             cctv='configured' if settings.sigap_camera_urls else 'not_configured',
                             override='available' if ready and len(settings.sigap_control_api_key.get_secret_value()) >= 32 else 'unavailable'))
         return JSONResponse(report.model_dump(mode="json"), status_code=200 if ready else 503)

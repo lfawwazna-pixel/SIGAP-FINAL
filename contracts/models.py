@@ -110,7 +110,7 @@ class Capabilities(Contract):
     phase_engine: Literal["not_implemented", "not_hosted", "running", "faulted", "stopped", "stalled"] = "not_hosted"
     authentication: Literal["not_implemented", "available", "unavailable"] = "not_implemented"
     override: Literal["not_implemented", "available", "unavailable"] = "not_implemented"
-    ai: Literal["not_implemented"] = "not_implemented"
+    ai: Literal["not_implemented", "available", "unavailable"] = "not_implemented"
     cctv: Literal["not_configured", "configured"] = "not_configured"
 
 

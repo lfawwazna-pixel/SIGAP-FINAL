@@ -23,6 +23,145 @@
       "title": "Point",
       "type": "object"
     },
+    "TrackedVehicle": {
+      "additionalProperties": false,
+      "properties": {
+        "track_id": {
+          "minimum": 1,
+          "title": "Track Id",
+          "type": "integer"
+        },
+        "class_name": {
+          "enum": [
+            "car",
+            "motorcycle",
+            "bus",
+            "truck",
+            "ambulance",
+            "fire_truck"
+          ],
+          "title": "Class Name",
+          "type": "string"
+        },
+        "confidence": {
+          "maximum": 1,
+          "minimum": 0,
+          "title": "Confidence",
+          "type": "number"
+        },
+        "bbox": {
+          "items": {
+            "type": "number"
+          },
+          "maxItems": 4,
+          "minItems": 4,
+          "title": "Bbox",
+          "type": "array"
+        }
+      },
+      "required": [
+        "track_id",
+        "class_name",
+        "confidence",
+        "bbox"
+      ],
+      "title": "TrackedVehicle",
+      "type": "object"
+    },
+    "TrackingView": {
+      "additionalProperties": false,
+      "properties": {
+        "state": {
+          "enum": [
+            "disabled",
+            "warming",
+            "tracking",
+            "stale",
+            "error"
+          ],
+          "title": "State",
+          "type": "string"
+        },
+        "source_session": {
+          "format": "uuid",
+          "title": "Source Session",
+          "type": "string"
+        },
+        "frame_id": {
+          "minimum": 0,
+          "title": "Frame Id",
+          "type": "integer"
+        },
+        "age_seconds": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Age Seconds"
+        },
+        "processing_fps": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Processing Fps"
+        },
+        "observed_fps": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Observed Fps"
+        },
+        "device": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Device"
+        },
+        "tracks": {
+          "items": {
+            "$ref": "#/$defs/TrackedVehicle"
+          },
+          "title": "Tracks",
+          "type": "array"
+        },
+        "message": {
+          "title": "Message",
+          "type": "string"
+        }
+      },
+      "required": [
+        "state",
+        "source_session",
+        "frame_id",
+        "age_seconds",
+        "processing_fps",
+        "observed_fps",
+        "device",
+        "tracks",
+        "message"
+      ],
+      "title": "TrackingView",
+      "type": "object"
+    },
     "VideoCalibration": {
       "additionalProperties": false,
       "properties": {
@@ -138,10 +277,20 @@
           "type": "boolean"
         },
         "detection_ready": {
-          "const": false,
           "default": false,
           "title": "Detection Ready",
           "type": "boolean"
+        },
+        "tracking": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/TrackingView"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
         },
         "calibration": {
           "anyOf": [
@@ -169,6 +318,7 @@
         "frame_age_seconds",
         "live_configured",
         "detection_ready",
+        "tracking",
         "calibration",
         "message"
       ],
