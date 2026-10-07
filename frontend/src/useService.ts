@@ -3,7 +3,7 @@ import { authGeneration, rejectSession } from './authEvents'
 
 export const apiBase = (import.meta.env.VITE_API_BASE_URL || '/api').replace(/\/$/, '')
 
-export function useService<T>(path: string, validate: (data: unknown) => data is T, active = true) {
+export function useService<T>(path: string, validate: (data: unknown) => data is T, active = true, intervalMs = 1000) {
   const [data, setData] = useState<T | null>(null)
   const [error, setError] = useState('')
   const [revision, refresh] = useState(0)
@@ -30,14 +30,14 @@ export function useService<T>(path: string, validate: (data: unknown) => data is
         if (!disposed && attempt === epoch) { setData(null); setError('Koneksi layanan terputus atau data tidak valid.') }
       } finally {
         clearTimeout(timeout)
-        if (!disposed && attempt === epoch && !document.hidden) timer = setTimeout(() => void poll(), 1000)
+        if (!disposed && attempt === epoch && !document.hidden) timer = setTimeout(() => void poll(), intervalMs)
       }
     }
     const visibility = () => { ++epoch; clearTimeout(timer); abort?.abort(); setData(null); if (!document.hidden) void poll() }
     document.addEventListener('visibilitychange', visibility)
     void poll()
     return () => { disposed = true; abort?.abort(); clearTimeout(timer); document.removeEventListener('visibilitychange', visibility) }
-  }, [path, validate, active, revision])
+  }, [path, validate, active, revision, intervalMs])
   return { data, error, refresh: () => refresh(v => v+1) }
 }
 

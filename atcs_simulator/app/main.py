@@ -1,6 +1,8 @@
 from contextlib import asynccontextmanager
 from uuid import UUID
 import hmac
+import sqlite3
+import logging
 
 from fastapi import Depends, FastAPI, HTTPException, Query, Request
 from fastapi.exceptions import RequestValidationError
@@ -8,6 +10,9 @@ from fastapi.responses import JSONResponse
 
 from atcs_simulator.app.runtime import AtcsRuntime, Clock, ConflictProvider
 from atcs_simulator.app.control_settings import ControlSettings
+from atcs_simulator.app.archive import EventArchive
+from contracts.history import EventArchivePage
+from typing import Literal
 from contracts.control import ControlCommand, CommandReceipt, ControlStatus
 from contracts.configuration import load_config
 from contracts.models import AtcsStatus, Capabilities, DatabaseCheck, Health, IntersectionConfig, TrafficEvents
@@ -18,15 +23,22 @@ from adaptive.policy import measure_world
 
 def create_app(config_path: str | None = None, *, clock: Clock | None = None,
                conflict_provider: ConflictProvider | None = None, tick_seconds: float = 0.1,
-               event_capacity: int = 1000, control_settings=None, control_policy=None) -> FastAPI:
+               event_capacity: int = 1000, control_settings=None, control_policy=None, archive_path=None) -> FastAPI:
     config = load_config(config_path)
     control_settings = control_settings or ControlSettings()
 
     @asynccontextmanager
     async def lifespan(app: FastAPI):
+        archive = None
+        if archive_path:
+            try:
+                archive = EventArchive(archive_path)
+            except (OSError, sqlite3.Error):
+                logging.getLogger(__name__).exception('Event archive unavailable; controller continues independently')
+        app.state.archive = archive
         runtime = AtcsRuntime(config, clock=clock, conflict_provider=conflict_provider,
                               tick_seconds=tick_seconds, event_capacity=event_capacity,
-                              control_settings=control_settings, control_policy=control_policy)
+                              control_settings=control_settings, control_policy=control_policy, event_sink=archive.append if archive else None)
         app.state.runtime = runtime
         await runtime.start()
         try:
@@ -87,6 +99,16 @@ def create_app(config_path: str | None = None, *, clock: Clock | None = None,
             raise HTTPException(status_code=400, detail={"code": "CURSOR_AHEAD",
                 "message": "Cursor melebihi riwayat sesi; baca dari awal dengan run_id terkini."}) from None
 
+    @app.get('/history', response_model=EventArchivePage)
+    def history(before: int | None = Query(default=None, ge=1), limit: int = Query(default=50, ge=1, le=100),
+                event_filter: Literal['all','phase','incident'] = 'all'):
+        if app.state.archive is None:
+            raise HTTPException(503, detail={'code':'ARCHIVE_UNAVAILABLE','message':'Arsip belum diaktifkan.'})
+        try:
+            return app.state.archive.page(config.intersection_id, app.state.runtime.clock.utcnow(), before, limit, event_filter)
+        except (RuntimeError, OSError, sqlite3.Error):
+            raise HTTPException(503, detail={'code':'ARCHIVE_UNAVAILABLE','message':'Kelengkapan arsip belum dapat diverifikasi.'}) from None
+
     @app.get('/traffic', response_model=TrafficView)
     async def traffic():
         return app.state.runtime.traffic_view()
@@ -122,4 +144,4 @@ def create_app(config_path: str | None = None, *, clock: Clock | None = None,
     return app
 
 
-app = create_app()
+app = create_app(archive_path=ControlSettings().sigap_event_archive)

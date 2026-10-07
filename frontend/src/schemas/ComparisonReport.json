@@ -1,0 +1,396 @@
+{
+  "$defs": {
+    "AdaptivePolicyConfig": {
+      "additionalProperties": false,
+      "properties": {
+        "video_baseline_floor_ratio": {
+          "default": 0.75,
+          "maximum": 1,
+          "minimum": 0.1,
+          "title": "Video Baseline Floor Ratio",
+          "type": "number"
+        },
+        "video_maximum_drop_ratio": {
+          "default": 0.2,
+          "maximum": 0.5,
+          "minimum": 0.01,
+          "title": "Video Maximum Drop Ratio",
+          "type": "number"
+        },
+        "minimum_green": {
+          "default": 10,
+          "maximum": 60,
+          "minimum": 1,
+          "title": "Minimum Green",
+          "type": "number"
+        },
+        "maximum_green": {
+          "default": 60,
+          "maximum": 180,
+          "minimum": 1,
+          "title": "Maximum Green",
+          "type": "number"
+        },
+        "queue_weight": {
+          "default": 4,
+          "maximum": 100,
+          "minimum": 0,
+          "title": "Queue Weight",
+          "type": "number"
+        },
+        "wait_weight": {
+          "default": 1,
+          "maximum": 100,
+          "minimum": 0,
+          "title": "Wait Weight",
+          "type": "number"
+        },
+        "age_weight": {
+          "default": 0.5,
+          "maximum": 100,
+          "minimum": 0,
+          "title": "Age Weight",
+          "type": "number"
+        },
+        "service_age_target": {
+          "default": 120,
+          "maximum": 1800,
+          "minimum": 10,
+          "title": "Service Age Target",
+          "type": "number"
+        },
+        "seconds_per_queued_vehicle": {
+          "default": 2,
+          "maximum": 10,
+          "minimum": 0.1,
+          "title": "Seconds Per Queued Vehicle",
+          "type": "number"
+        },
+        "data_timeout": {
+          "default": 3,
+          "maximum": 30,
+          "minimum": 0.5,
+          "title": "Data Timeout",
+          "type": "number"
+        }
+      },
+      "required": [
+        "video_baseline_floor_ratio",
+        "video_maximum_drop_ratio",
+        "minimum_green",
+        "maximum_green",
+        "queue_weight",
+        "wait_weight",
+        "age_weight",
+        "service_age_target",
+        "seconds_per_queued_vehicle",
+        "data_timeout"
+      ],
+      "title": "AdaptivePolicyConfig",
+      "type": "object"
+    },
+    "ComparisonInput": {
+      "additionalProperties": false,
+      "properties": {
+        "duration_seconds": {
+          "default": 900,
+          "maximum": 1800,
+          "minimum": 300,
+          "title": "Duration Seconds",
+          "type": "integer"
+        },
+        "seed": {
+          "default": 42,
+          "maximum": 2147483647,
+          "minimum": 0,
+          "title": "Seed",
+          "type": "integer"
+        },
+        "demand_per_minute": {
+          "additionalProperties": {
+            "maximum": 60,
+            "minimum": 0,
+            "type": "integer"
+          },
+          "propertyNames": {
+            "enum": [
+              "U",
+              "T",
+              "S",
+              "B"
+            ]
+          },
+          "title": "Demand Per Minute",
+          "type": "object"
+        },
+        "detection_fraction": {
+          "default": 0.65,
+          "maximum": 1,
+          "minimum": 0.1,
+          "title": "Detection Fraction",
+          "type": "number"
+        },
+        "discharge_headway_seconds": {
+          "default": 2.2,
+          "maximum": 5,
+          "minimum": 1,
+          "title": "Discharge Headway Seconds",
+          "type": "number"
+        },
+        "factors": {
+          "$ref": "#/$defs/ImpactFactors"
+        }
+      },
+      "required": [
+        "duration_seconds",
+        "seed",
+        "demand_per_minute",
+        "detection_fraction",
+        "discharge_headway_seconds",
+        "factors"
+      ],
+      "title": "ComparisonInput",
+      "type": "object"
+    },
+    "ImpactFactors": {
+      "additionalProperties": false,
+      "properties": {
+        "idle_liters_per_hour": {
+          "default": 0.8,
+          "maximum": 10,
+          "minimum": 0,
+          "title": "Idle Liters Per Hour",
+          "type": "number"
+        },
+        "co2_kg_per_liter": {
+          "default": 2.35,
+          "maximum": 5,
+          "minimum": 0,
+          "title": "Co2 Kg Per Liter",
+          "type": "number"
+        },
+        "fuel_rupiah_per_liter": {
+          "default": 10000,
+          "maximum": 100000,
+          "minimum": 0,
+          "title": "Fuel Rupiah Per Liter",
+          "type": "number"
+        },
+        "time_rupiah_per_vehicle_hour": {
+          "default": 20000,
+          "maximum": 1000000,
+          "minimum": 0,
+          "title": "Time Rupiah Per Vehicle Hour",
+          "type": "number"
+        },
+        "queue_spacing_meters": {
+          "default": 6.5,
+          "maximum": 20,
+          "minimum": 1,
+          "title": "Queue Spacing Meters",
+          "type": "number"
+        }
+      },
+      "required": [
+        "idle_liters_per_hour",
+        "co2_kg_per_liter",
+        "fuel_rupiah_per_liter",
+        "time_rupiah_per_vehicle_hour",
+        "queue_spacing_meters"
+      ],
+      "title": "ImpactFactors",
+      "type": "object"
+    },
+    "ImpactPoint": {
+      "additionalProperties": false,
+      "properties": {
+        "time_seconds": {
+          "minimum": 0,
+          "title": "Time Seconds",
+          "type": "number"
+        },
+        "queue_vehicles": {
+          "minimum": 0,
+          "title": "Queue Vehicles",
+          "type": "integer"
+        },
+        "queue_meters_estimate": {
+          "minimum": 0,
+          "title": "Queue Meters Estimate",
+          "type": "number"
+        },
+        "average_wait_seconds": {
+          "minimum": 0,
+          "title": "Average Wait Seconds",
+          "type": "number"
+        },
+        "cumulative_wait_vehicle_seconds": {
+          "minimum": 0,
+          "title": "Cumulative Wait Vehicle Seconds",
+          "type": "number"
+        },
+        "completed_vehicles": {
+          "minimum": 0,
+          "title": "Completed Vehicles",
+          "type": "integer"
+        },
+        "arrivals": {
+          "minimum": 0,
+          "title": "Arrivals",
+          "type": "integer"
+        },
+        "idle_fuel_liters": {
+          "minimum": 0,
+          "title": "Idle Fuel Liters",
+          "type": "number"
+        },
+        "co2_kg": {
+          "minimum": 0,
+          "title": "Co2 Kg",
+          "type": "number"
+        },
+        "fuel_cost_rupiah": {
+          "minimum": 0,
+          "title": "Fuel Cost Rupiah",
+          "type": "number"
+        },
+        "time_cost_rupiah": {
+          "minimum": 0,
+          "title": "Time Cost Rupiah",
+          "type": "number"
+        }
+      },
+      "required": [
+        "time_seconds",
+        "queue_vehicles",
+        "queue_meters_estimate",
+        "average_wait_seconds",
+        "cumulative_wait_vehicle_seconds",
+        "completed_vehicles",
+        "arrivals",
+        "idle_fuel_liters",
+        "co2_kg",
+        "fuel_cost_rupiah",
+        "time_cost_rupiah"
+      ],
+      "title": "ImpactPoint",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "id": {
+      "title": "Id",
+      "type": "string"
+    },
+    "intersection_id": {
+      "title": "Intersection Id",
+      "type": "string"
+    },
+    "created_at": {
+      "format": "date-time",
+      "title": "Created At",
+      "type": "string"
+    },
+    "source": {
+      "const": "paired_queue_simulation",
+      "default": "paired_queue_simulation",
+      "title": "Source",
+      "type": "string"
+    },
+    "title": {
+      "title": "Title",
+      "type": "string"
+    },
+    "assumptions": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Assumptions",
+      "type": "array"
+    },
+    "input": {
+      "$ref": "#/$defs/ComparisonInput"
+    },
+    "arrival_schedule_sha256": {
+      "title": "Arrival Schedule Sha256",
+      "type": "string"
+    },
+    "total_scheduled_arrivals": {
+      "minimum": 0,
+      "title": "Total Scheduled Arrivals",
+      "type": "integer"
+    },
+    "baseline_green_seconds": {
+      "additionalProperties": {
+        "minimum": 0,
+        "type": "number"
+      },
+      "propertyNames": {
+        "enum": [
+          "U",
+          "T",
+          "S",
+          "B"
+        ]
+      },
+      "title": "Baseline Green Seconds",
+      "type": "object"
+    },
+    "yellow_seconds": {
+      "minimum": 0,
+      "title": "Yellow Seconds",
+      "type": "number"
+    },
+    "all_red_seconds": {
+      "minimum": 0,
+      "title": "All Red Seconds",
+      "type": "number"
+    },
+    "adaptive_policy": {
+      "$ref": "#/$defs/AdaptivePolicyConfig"
+    },
+    "atcs": {
+      "items": {
+        "$ref": "#/$defs/ImpactPoint"
+      },
+      "minItems": 2,
+      "title": "Atcs",
+      "type": "array"
+    },
+    "sigap": {
+      "items": {
+        "$ref": "#/$defs/ImpactPoint"
+      },
+      "minItems": 2,
+      "title": "Sigap",
+      "type": "array"
+    },
+    "emergency_status": {
+      "const": "not_evaluated",
+      "default": "not_evaluated",
+      "title": "Emergency Status",
+      "type": "string"
+    }
+  },
+  "required": [
+    "id",
+    "intersection_id",
+    "created_at",
+    "source",
+    "title",
+    "assumptions",
+    "input",
+    "arrival_schedule_sha256",
+    "total_scheduled_arrivals",
+    "baseline_green_seconds",
+    "yellow_seconds",
+    "all_red_seconds",
+    "adaptive_policy",
+    "atcs",
+    "sigap",
+    "emergency_status"
+  ],
+  "title": "ComparisonReport",
+  "type": "object"
+}

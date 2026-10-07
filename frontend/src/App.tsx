@@ -1,9 +1,12 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { lazy, Suspense, useCallback, useEffect, useRef, useState } from 'react'
 import { LoginScreen } from './LoginScreen'
 import { Monitor } from './Monitor'
+import { HistoryPage } from './HistoryPage'
 import { login, logout, restoreSession, type AuthResult } from './authApi'
 import { nextAuthGeneration } from './authEvents'
 import type { SessionView } from './types/SessionView'
+
+const AnalyticsPage = lazy(() => import('./AnalyticsPage').then(module => ({ default: module.AnalyticsPage })))
 
 export function App() {
   const [session, setSession] = useState<SessionView | null>(null)
@@ -13,6 +16,7 @@ export function App() {
   const [logoutError, setLogoutError] = useState<string | null>(null)
   const active = useRef<AbortController | null>(null)
   const lock = useRef(false)
+  const navigationPath = useRef(window.location.pathname)
   const begin = useCallback(() => { active.current?.abort(); const abort = new AbortController(); active.current = abort; return abort }, [])
   const apply = useCallback((result: AuthResult) => {
     if (result.kind === 'authenticated') { setSession(result.session); setScreen('authenticated'); setMessage('') }
@@ -27,8 +31,9 @@ export function App() {
   }, [apply, begin])
   useEffect(() => {
     if (screen === 'checking') return
-    const path = screen === 'authenticated' ? '/monitor' : '/login'
+    const path = screen === 'authenticated' ? (['/history', '/analytics'].includes(window.location.pathname) ? window.location.pathname : '/monitor') : '/login'
     if (window.location.pathname !== path) window.history.replaceState(null, '', path)
+    navigationPath.current = path
   }, [screen])
   useEffect(() => {
     void check(true)
@@ -38,7 +43,11 @@ export function App() {
       setSession(null); setScreen('guest'); setMessage('Sesi telah berakhir atau akses dicabut. Silakan masuk kembali.')
     }
     window.addEventListener('sigap:session-rejected', rejected)
-    const navigate = () => void check(true)
+    const navigate = () => {
+      if (window.location.pathname === navigationPath.current) return
+      navigationPath.current = window.location.pathname
+      void check(true)
+    }
     window.addEventListener('popstate', navigate)
     return () => {
       active.current?.abort()
@@ -82,6 +91,8 @@ export function App() {
     }
     lock.current = false
   }
+  if (screen === 'authenticated' && session && window.location.pathname === '/history') return <HistoryPage session={session} onLogout={() => void signOut()} signingOut={busy} logoutError={logoutError} />
+  if (screen === 'authenticated' && session && window.location.pathname === '/analytics') return <Suspense fallback={<main><p role="status">Memuat analitik lalu lintas…</p></main>}><AnalyticsPage session={session} onLogout={() => void signOut()} signingOut={busy} logoutError={logoutError} /></Suspense>
   if (screen === 'authenticated' && session) return <Monitor session={session} onLogout={() => void signOut()} signingOut={busy} logoutError={logoutError} />
   return <LoginScreen screen={screen === 'authenticated' ? 'checking' : screen} busy={busy} message={message} onSubmit={signIn} onRetry={() => void check(true)} />
 }

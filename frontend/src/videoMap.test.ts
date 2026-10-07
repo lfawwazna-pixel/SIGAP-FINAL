@@ -1,5 +1,6 @@
+import { renderHook, act, cleanup } from '@testing-library/react'
 import { expect, it } from 'vitest'
-import { freshVideoObservation, videoMapVehicles } from './videoMap'
+import { freshVideoObservation, videoMapVehicles, useVideoMapData } from './videoMap'
 import type { AdaptiveStatus } from './types/AdaptiveStatus'
 
 it('keeps fresh per-camera tracking when uncalibrated, ready or unavailable, and removes only stale cameras', () => {
@@ -21,4 +22,19 @@ it('keeps fresh per-camera tracking when uncalibrated, ready or unavailable, and
   expect(videoMapVehicles(data, 'test', now+3100)).toEqual([])
   expect(freshVideoObservation('invalid-time', now)).toBe(false)
   expect(freshVideoObservation(new Date(now+1000).toISOString(), now)).toBe(false)
+})
+
+it('bridges one failed poll, expires original timestamps, and honors successful empty/reset samples', () => {
+  const now=Date.now()
+  const pose={id:1,origin:'U'}
+  const data={enabled:true,source:'recording',map_vehicles:[pose],measurements:{intersection_id:'test',approaches:{U:{observed_at:new Date(now).toISOString()}}}} as unknown as AdaptiveStatus
+  const {result,rerender}=renderHook(({value}:{value:AdaptiveStatus|null})=>useVideoMapData(value,'test'),{initialProps:{value:data as AdaptiveStatus|null}})
+  act(()=>rerender({value:null}))
+  expect(videoMapVehicles(result.current,'test',now+500)).toEqual([pose])
+  expect(videoMapVehicles(result.current,'test',now+3100)).toEqual([])
+  act(()=>rerender({value:{...data,map_vehicles:[]}}))
+  expect(videoMapVehicles(result.current,'test',now)).toEqual([])
+  act(()=>rerender({value:{...data,source:'synthetic'}}))
+  expect(result.current).toBeNull()
+  cleanup()
 })

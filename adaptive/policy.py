@@ -1,6 +1,6 @@
 from datetime import datetime
 from contracts.adaptive import AdaptivePolicyConfig, AdaptiveDecision, MeasurementBatch
-from contracts.configuration import PROJECT_ROOT
+from contracts.configuration import PROJECT_ROOT, load_config
 
 DIRECTIONS = ('U', 'T', 'S', 'B')
 
@@ -11,11 +11,15 @@ class AdaptivePolicy:
             (PROJECT_ROOT/'configs/adaptive-policy.json').read_text(encoding='utf-8'))
         self.last_served = dict.fromkeys(DIRECTIONS, 0.0)
         self.previous = None
+        self.baseline = load_config().fixed_time.green_seconds
+        self.last_green = {}
 
-    def served(self, approach, now):
+    def served(self, approach, now, green_seconds=None):
         # Only applied green counts as service, never a submitted plan.
         self.last_served[approach] = now
         self.previous = approach
+        if green_seconds is not None:
+            self.last_green[approach] = green_seconds
 
     def choose(self, batch: MeasurementBatch, now: float, at: datetime):
         p = self.config
@@ -27,7 +31,10 @@ class AdaptivePolicy:
         if invalid:
             return AdaptiveDecision(decided_at=at, measurement_sequence=batch.sequence,
                 approach=None, green_seconds=None, reason='Data tidak layak: '+', '.join(invalid), scores=scores, inputs=data)
-        eligible = [d for d in DIRECTIONS if data[d].exit_available and data[d].controlled_count]
+        # Zero detections in a partial camera view is not proof of an empty road.
+        # Keep that approach in the service-age guard without inventing a count.
+        uncertain = {d for d in DIRECTIONS if batch.source != 'synthetic' and data[d].queue_visibility != 'full'}
+        eligible = [d for d in DIRECTIONS if data[d].exit_available and (data[d].controlled_count or d in uncertain)]
         if not eligible:
             eligible = [d for d in DIRECTIONS if data[d].exit_available]
             reason = 'Tidak ada kebutuhan terkontrol; pelayanan minimum bergilir.'
@@ -36,7 +43,7 @@ class AdaptivePolicy:
         if not eligible:
             return AdaptiveDecision(decided_at=at, measurement_sequence=batch.sequence,
                 approach=None, green_seconds=None, reason='Semua keluaran terblokir.', scores=scores, inputs=data)
-        overdue = [d for d in eligible if data[d].controlled_count and now-self.last_served[d] >= p.service_age_target]
+        overdue = [d for d in eligible if (data[d].controlled_count or d in uncertain) and now-self.last_served[d] >= p.service_age_target]
         if overdue:
             selected = min(overdue, key=lambda d: (self.last_served[d], -data[d].oldest_wait_seconds, DIRECTIONS.index(d)))
             reason = 'Pemerataan: pendekat melewati target usia pelayanan.'
@@ -46,6 +53,15 @@ class AdaptivePolicy:
         v = data[selected]
         duration = min(p.maximum_green, max(p.minimum_green,
             p.minimum_green+p.seconds_per_queued_vehicle*v.queue_count+.5*(v.controlled_count-v.queue_count)))
+        if batch.source != 'synthetic':
+            baseline = self.baseline[selected]
+            partial = v.queue_visibility != 'full'
+            congested = v.queue_reaches_boundary or v.occupancy_ratio >= .35 or (v.queue_count >= 3 and v.oldest_wait_seconds >= 20)
+            floor = baseline if congested else baseline*p.video_baseline_floor_ratio if partial else p.minimum_green
+            previous = self.last_green.get(selected, baseline)
+            duration = min(p.maximum_green, max(duration, floor, previous*(1-p.video_maximum_drop_ratio)))
+            reason += (' Antrean padat/menjangkau batas kamera; waktu dasar dipertahankan.' if congested else ' Pandangan antrean sebagian; batas waktu dasar dipertahankan.' if partial else ' Ujung antrean terlihat; durasi boleh dikurangi bertahap.')
+            reason += f' Dasar {baseline} dtk; penurunan maksimal {p.video_maximum_drop_ratio*100:g}% per pelayanan.'
         return AdaptiveDecision(decided_at=at, measurement_sequence=batch.sequence,
             approach=selected, green_seconds=round(duration, 1), reason=reason, scores=scores, inputs=data)
 

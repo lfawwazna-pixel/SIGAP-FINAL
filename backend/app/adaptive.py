@@ -8,6 +8,7 @@ from uuid import uuid4
 from fastapi import APIRouter, Depends, Request
 from typing import Literal
 from adaptive.policy import AdaptivePolicy
+from contracts.configuration import load_config
 from backend.app.auth import require_operator, error
 from backend.app.mutations import require_mutation
 from contracts.adaptive import AdaptiveStatus, MeasurementBatch
@@ -30,6 +31,7 @@ class AdaptiveSender:
         self.sender = uuid4()
         self.run_id = None
         self.policy = AdaptivePolicy()
+        self.policy.baseline = load_config(settings.sigap_config_path).fixed_time.green_seconds
         self.started = time.monotonic()
         self.sequences = dict(observe=0, heartbeat=0, plan=0)
         self.batch = self.frozen = self.preview = None
@@ -95,9 +97,11 @@ class AdaptiveSender:
             raise ValueError('ATCS belum mengizinkan sumber atau statusnya tidak tersedia.')
         if status.atcs_run_id != self.run_id:
             self.run_id = status.atcs_run_id
+            baseline = self.policy.baseline
             self.policy = AdaptivePolicy()
+            self.policy.baseline = baseline
             self.policy.config.minimum_green = status.policy.minimum_green_seconds
-            self.policy.config.maximum_green = status.policy.maximum_green_seconds
+            self.policy.config.maximum_green = status.policy.maximum_green_seconds if self.video_mode else min(60, status.policy.maximum_green_seconds)
             self.policy.config.data_timeout = status.policy.data_timeout_seconds
             self.started = time.monotonic()
             self.applied = None
@@ -137,7 +141,7 @@ class AdaptiveSender:
             decision = next((d for d in self.decisions if d.request_id == status.active_request_id), None)
             if decision:
                 decision.outcome = 'applied'
-                self.policy.served(decision.approach, now)
+                self.policy.served(decision.approach, now, decision.green_seconds)
             self.applied = status.active_request_id
         for decision in self.decisions:
             if decision.outcome == 'accepted' and decision.request_id not in (status.active_request_id, status.pending_request_id):

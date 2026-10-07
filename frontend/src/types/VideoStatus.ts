@@ -23,6 +23,7 @@ export type AgeSeconds = number | null;
 export type ProcessingFps = number | null;
 export type ObservedFps = number | null;
 export type Device = string | null;
+export type Coasted = boolean;
 export type TrackId = number;
 export type ClassName = "car" | "motorcycle" | "bus" | "truck" | "ambulance" | "fire_truck";
 export type Confidence = number;
@@ -33,6 +34,7 @@ export type Confidence = number;
 export type Bbox = [number, number, number, number];
 export type Tracks = TrackedVehicle[];
 export type Message = string;
+export type UpstreamQueueVisible = boolean;
 export type X = number;
 export type Y = number;
 /**
@@ -75,12 +77,14 @@ export interface TrackingView {
   message: Message;
 }
 export interface TrackedVehicle {
+  coasted: Coasted;
   track_id: TrackId;
   class_name: ClassName;
   confidence: Confidence;
   bbox: Bbox;
 }
 export interface VideoCalibration {
+  upstream_queue_visible: UpstreamQueueVisible;
   lanes: Lanes;
   stop_line: StopLine;
 }

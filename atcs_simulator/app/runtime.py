@@ -8,6 +8,7 @@ from typing import Literal, Protocol
 from atcs_simulator.app.control import ManagedEngine
 from atcs_simulator.app.control_settings import ControlSettings
 from atcs_simulator.app.traffic import TrafficWorld
+from contracts.control import ControlPolicy
 from contracts.models import AtcsStatus, ConflictArea, IntersectionConfig
 
 logger = logging.getLogger(__name__)
@@ -43,7 +44,7 @@ class AssumedClear:
 class AtcsRuntime:
     def __init__(self, config: IntersectionConfig, *, clock: Clock | None = None,
                  conflict_provider: ConflictProvider | None = None, tick_seconds: float = 0.1,
-                 event_capacity: int = 1000, control_settings=None, control_policy=None):
+                 event_capacity: int = 1000, control_settings=None, control_policy=None, event_sink=None):
         if not 0.01 <= tick_seconds <= 0.5:
             raise ValueError("Tick interval must be 0.01–0.5 seconds")
         self.config = config
@@ -53,7 +54,12 @@ class AtcsRuntime:
         self.tick_seconds = tick_seconds
         self.event_capacity = event_capacity
         self.control_settings = control_settings or ControlSettings()
-        self.control_policy = control_policy
+        # Leave time for a safe yellow/all-red transition before a long green.
+        # Heartbeat/data expiry still cancels control independently of this horizon.
+        self.control_policy = control_policy or ControlPolicy(
+            maximum_green_seconds=self.control_settings.atcs_maximum_green_seconds,
+            maximum_plan_horizon_seconds=min(300, self.control_settings.atcs_maximum_green_seconds+120))
+        self.event_sink = event_sink
         self.engine: ManagedEngine | None = None
         self.task: asyncio.Task | None = None
         self.traffic_at = self.clock.monotonic()
@@ -71,7 +77,7 @@ class AtcsRuntime:
         at = self.clock.utcnow()
         self.engine = ManagedEngine(self.config, now=self.clock.monotonic(), at=at,
                                       control_settings=self.control_settings, policy=self.control_policy,
-                                      conflict=self._conflict(at), event_capacity=self.event_capacity)
+                                      conflict=self._conflict(at), event_capacity=self.event_capacity, event_sink=self.event_sink)
         self.task = asyncio.create_task(self._run(), name="atcs-fixed-time")
 
     async def _run(self):

@@ -160,6 +160,8 @@ Tes menerapkan migrasi, membandingkan ORM, membuat akun pengujian unik, menguji 
 
 ## Dokumen
 
+- [Analitik wilayah TomTom, prediksi, dan dampak ATCS–SIGAP](docs/traffic-analytics.md)
+- [Stabilitas tracking, durasi video, dan arsip kejadian](docs/tracking-stability-and-timing.md)
 - [Autentikasi operator 2D](docs/operator-auth.md)
 - [Kendaraan dan percobaan 2E/2F](docs/traffic-simulation.md)
 - [Monitor simpang 2C](docs/intersection-monitor.md)

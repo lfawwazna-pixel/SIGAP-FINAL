@@ -1,0 +1,99 @@
+{
+  "$defs": {
+    "ImpactFactors": {
+      "additionalProperties": false,
+      "properties": {
+        "idle_liters_per_hour": {
+          "default": 0.8,
+          "maximum": 10,
+          "minimum": 0,
+          "title": "Idle Liters Per Hour",
+          "type": "number"
+        },
+        "co2_kg_per_liter": {
+          "default": 2.35,
+          "maximum": 5,
+          "minimum": 0,
+          "title": "Co2 Kg Per Liter",
+          "type": "number"
+        },
+        "fuel_rupiah_per_liter": {
+          "default": 10000,
+          "maximum": 100000,
+          "minimum": 0,
+          "title": "Fuel Rupiah Per Liter",
+          "type": "number"
+        },
+        "time_rupiah_per_vehicle_hour": {
+          "default": 20000,
+          "maximum": 1000000,
+          "minimum": 0,
+          "title": "Time Rupiah Per Vehicle Hour",
+          "type": "number"
+        },
+        "queue_spacing_meters": {
+          "default": 6.5,
+          "maximum": 20,
+          "minimum": 1,
+          "title": "Queue Spacing Meters",
+          "type": "number"
+        }
+      },
+      "title": "ImpactFactors",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "duration_seconds": {
+      "default": 900,
+      "maximum": 1800,
+      "minimum": 300,
+      "title": "Duration Seconds",
+      "type": "integer"
+    },
+    "seed": {
+      "default": 42,
+      "maximum": 2147483647,
+      "minimum": 0,
+      "title": "Seed",
+      "type": "integer"
+    },
+    "demand_per_minute": {
+      "additionalProperties": {
+        "maximum": 60,
+        "minimum": 0,
+        "type": "integer"
+      },
+      "propertyNames": {
+        "enum": [
+          "U",
+          "T",
+          "S",
+          "B"
+        ]
+      },
+      "title": "Demand Per Minute",
+      "type": "object"
+    },
+    "detection_fraction": {
+      "default": 0.65,
+      "maximum": 1,
+      "minimum": 0.1,
+      "title": "Detection Fraction",
+      "type": "number"
+    },
+    "discharge_headway_seconds": {
+      "default": 2.2,
+      "maximum": 5,
+      "minimum": 1,
+      "title": "Discharge Headway Seconds",
+      "type": "number"
+    },
+    "factors": {
+      "$ref": "#/$defs/ImpactFactors"
+    }
+  },
+  "title": "ComparisonInput",
+  "type": "object"
+}

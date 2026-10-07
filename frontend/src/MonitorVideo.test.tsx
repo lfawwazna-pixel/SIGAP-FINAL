@@ -15,11 +15,11 @@ it.each([false, true])('shows identical camera counts in both workspaces after t
   const at = new Date().toISOString()
   const video: AdaptiveStatus = { enabled:true, source:'recording', fault:'none', status:'active', message:'SIGAP aktif.',
     auto_resume:true, source_sessions:{U:runId,T:runId,S:runId,B:runId}, issues:{}, decisions:[],
-    policy:{minimum_green:10,maximum_green:60,queue_weight:4,wait_weight:1,age_weight:.5,
+    policy:{video_baseline_floor_ratio:.75,video_maximum_drop_ratio:.2,minimum_green:10,maximum_green:60,queue_weight:4,wait_weight:1,age_weight:.5,
       service_age_target:120,seconds_per_queued_vehicle:2,data_timeout:3},
     measurements:{intersection_id:config.intersection_id,source:'recording',source_session:secondRunId,sequence:1,
       approaches:Object.fromEntries(['U','T','S','B'].map(d => [d,{observed_at:at,usable:true,controlled_count:2,
-        queue_count:1,oldest_wait_seconds:7,slip_count:0,exit_available:true}]))},
+        queue_count:1,oldest_wait_seconds:7,slip_count:0,exit_available:true,queue_visibility:'partial' as const,occupancy_ratio:0,queue_reaches_boundary:false}]))},
     map_vehicles:[{id:11,origin:'T',movement:'straight',kind:'car',x:1100,y:470,heading:180,
       stopped:true,served:false,distance_to_stop:200,lane:'middle',target_lane:'middle',changing_to:null,stop_reason:'stationary'}] }
   const control: ControlStatus = {intersection_id:config.intersection_id,atcs_run_id:runId,observed_at:at,
@@ -44,7 +44,7 @@ it.each([false, true])('shows identical camera counts in both workspaces after t
     if (url.endsWith('/control')) return respond({...control,observed_at:new Date().toISOString(),
       state:acquired?'adaptive':'fixed_time',controller:acquired?'SIGAP':'ATCS'})
     if (url.endsWith('/adaptive')) return respond({...video,status:acquired?(waiting?'unavailable':'active'):'unavailable',
-      map_vehicles:acquired?video.map_vehicles:[]})
+      map_vehicles:video.map_vehicles})
     return respond({},503)
   }))
   const view = render(<Monitor session={sessionFixture()} onLogout={() => undefined} signingOut={false} logoutError={null} />)
@@ -70,12 +70,12 @@ it.each([false, true])('shows identical camera counts in both workspaces after t
   expect(view.container.querySelector('[data-vehicle-id="11"]')).toBeTruthy()
   acquired = false
   await act(async () => { await vi.advanceTimersByTimeAsync(1000) })
-  expect(view.container.querySelector('[data-vehicle-id="11"]')).toBeNull()
+  expect(view.container.querySelector('[data-vehicle-id="11"]')).toBeTruthy()
   expect(screen.getByText(/ATCS mengendalikan · waktu tetap/)).toBeTruthy()
   fireEvent.click(within(switcher).getByRole('button',{name:/ATCS Fase bersama/}))
   await act(async () => { await vi.advanceTimersByTimeAsync(500) })
-  expect(trafficRequests()).toBeGreaterThan(beforeTraffic)
-  expect(screen.getByTestId('countdown').textContent).toBe('99')
+  expect(trafficRequests()).toBe(beforeTraffic)
+  expect(screen.getByTestId('countdown').textContent).toBe('18')
 })
 
 it('shows all tracked vehicles upon selecting SIGAP before controller activation, without valid calibration', async () => {
@@ -88,11 +88,11 @@ it('shows all tracked vehicles upon selecting SIGAP before controller activation
     changing_to:null,stop_reason:null}
   const video: AdaptiveStatus = {enabled:true,source:'recording',fault:'none',status:'unavailable',message:'Periksa kalibrasi.',
     auto_resume:false,source_sessions:{},issues:{U:'Kalibrasi belum sesuai.'},decisions:[],
-    policy:{minimum_green:10,maximum_green:60,queue_weight:4,wait_weight:1,age_weight:.5,
+    policy:{video_baseline_floor_ratio:.75,video_maximum_drop_ratio:.2,minimum_green:10,maximum_green:60,queue_weight:4,wait_weight:1,age_weight:.5,
       service_age_target:120,seconds_per_queued_vehicle:2,data_timeout:3},
     measurements:{intersection_id:config.intersection_id,source:'recording',source_session:secondRunId,sequence:1,
       approaches:Object.fromEntries(['U','T','S','B'].map(d => [d,{observed_at:at,usable:false,controlled_count:0,
-        queue_count:0,oldest_wait_seconds:0,slip_count:0,exit_available:true}]))},
+        queue_count:0,oldest_wait_seconds:0,slip_count:0,exit_available:true,queue_visibility:'partial' as const,occupancy_ratio:0,queue_reaches_boundary:false}]))},
     map_vehicles:[pose,{...pose,id:12,origin:'T',x:800,y:470,heading:180},{...pose,id:13,origin:'T',x:830,y:470,heading:180}]}
   vi.stubGlobal('fetch',vi.fn((url:string) => {
     if (url.endsWith('/configuration')) return respond(config)
@@ -105,7 +105,7 @@ it('shows all tracked vehicles upon selecting SIGAP before controller activation
   }))
   const view = render(<Monitor session={sessionFixture()} onLogout={() => undefined} signingOut={false} logoutError={null} />)
   await act(async () => { await vi.advanceTimersByTimeAsync(0) })
-  expect(view.container.querySelectorAll('.map-vehicle')).toHaveLength(0)
+  expect(view.container.querySelectorAll('.map-vehicle')).toHaveLength(3)
   fireEvent.click(within(screen.getByRole('group',{name:'Mode ruang kerja'})).getByRole('button',{name:/SIGAP Adaptif/}))
   await act(async () => { await vi.advanceTimersByTimeAsync(0) })
   expect(view.container.querySelectorAll('.map-vehicle')).toHaveLength(3)

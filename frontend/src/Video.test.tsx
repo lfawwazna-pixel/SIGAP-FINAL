@@ -52,7 +52,7 @@ it('requests tracked frames only in SIGAP, displays measured FPS and retains the
   state.channels[0].detection_ready = true
   state.channels[0].tracking = {state:'tracking',source_session:runId,frame_id:12,age_seconds:0,
     processing_fps:8.5,observed_fps:4.8,device:'cpu',message:'YOLO + ByteTrack berjalan.',
-    tracks:[{track_id:1,class_name:'car',confidence:.8,bbox:[.1,.1,.4,.4]}]}
+    tracks:[{track_id:1,coasted:false,class_name:'car',confidence:.8,bbox:[.1,.1,.4,.4]}]}
   const view = render(panel('sigap')); await flush()
   const img = screen.getByAltText('Video pendekat Utara')
   expect(screen.getByText(/ByteTrack · 1 kendaraan/)).toBeTruthy()
@@ -69,7 +69,7 @@ it('shows the count from the displayed JPEG instead of another status frame and 
   state.channels[0].detection_ready = true
   state.channels[0].tracking = {state:'tracking',source_session:runId,frame_id:11,age_seconds:0,
     processing_fps:8.5,observed_fps:4.8,device:'cpu',message:'YOLO + ByteTrack berjalan.',
-    tracks:[{track_id:1,class_name:'car',confidence:.8,bbox:[.1,.1,.4,.4]}]}
+    tracks:[{track_id:1,coasted:false,class_name:'car',confidence:.8,bbox:[.1,.1,.4,.4]}]}
   render(panel('sigap')); await flush()
   expect(screen.getByText(/ByteTrack · 3 kendaraan/)).toBeTruthy()
   expect(screen.queryByText(/ByteTrack · 1 kendaraan/)).toBeNull()

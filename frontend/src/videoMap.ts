@@ -1,3 +1,4 @@
+import { useEffect, useState } from 'react'
 import type { AdaptiveStatus } from './types/AdaptiveStatus'
 
 export function freshVideoObservation(observedAt: string, now = Date.now()) {
@@ -14,4 +15,15 @@ export function videoMapVehicles(data: AdaptiveStatus | null, intersection: stri
     const observation = data.measurements!.approaches[vehicle.origin]
     return observation && freshVideoObservation(observation.observed_at, now)
   })
+}
+
+/** Retain one validated snapshot across a failed poll, never beyond its
+ * original camera timestamps. A successful empty/reset sample wins immediately. */
+export function useVideoMapData(data: AdaptiveStatus | null, intersection: string | undefined) {
+  const [saved, setSaved] = useState<AdaptiveStatus | null>(null)
+  useEffect(() => {
+    if (data !== null) setSaved(data.enabled && data.source !== 'synthetic' && data.measurements?.intersection_id === intersection ? data : null)
+  }, [data, intersection])
+  const current = data ?? saved
+  return current?.enabled && current.source !== 'synthetic' && current.measurements?.intersection_id === intersection ? current : null
 }

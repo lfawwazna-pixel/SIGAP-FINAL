@@ -12,7 +12,7 @@ import { MapZoom } from './MapZoom'
 import { SigapLogo } from './SigapLogo'
 import { AdaptivePanel, useAdaptive } from './AdaptivePanel'
 import { VideoPanel } from './VideoPanel'
-import { freshVideoObservation, videoMapVehicles } from './videoMap'
+import { freshVideoObservation, videoMapVehicles, useVideoMapData } from './videoMap'
 
 const connectionLabels: Record<Connection, string> = {
   loading: 'Menghubungkan', live: 'Terhubung ke ATCS', unavailable: 'Status tidak tersedia', stale: 'Data tidak mutakhir', paused: 'Pemantauan dijeda',
@@ -27,7 +27,7 @@ export function Monitor({ session, onLogout, signingOut, logoutError }: {
   const [selected, setSelected] = useState<Direction>('U')
   const [routes, setRoutes] = useState(true)
   const [eventFilter, setEventFilter] = useState<'all' | 'phase' | 'incident'>('all')
-  const [expandedHistory, setExpandedHistory] = useState(false)
+  const [historyVisible, setHistoryVisible] = useState(true)
   const { snapshot, checking } = useReadiness(revision)
   const config = snapshot.configuration.state === 'ready' && supportedGeometry(snapshot.configuration.data) ? snapshot.configuration.data : null
   const monitor = useMonitor(config?.intersection_id, revision)
@@ -41,8 +41,8 @@ export function Monitor({ session, onLogout, signingOut, logoutError }: {
   const control = useControl(config?.intersection_id, session.csrf_token, mayControl, adaptive.data?.enabled === true)
   const videoControl = verified?.controller === 'SIGAP' && (control.status?.source === 'cctv'
     || adaptive.data?.source === 'recording' || adaptive.data?.source === 'cctv')
-  const videoData = adaptive.data?.enabled && adaptive.data.source !== 'synthetic' ? adaptive.data : null
-  const videoMap = videoControl || (workspace === 'sigap' && adaptive.data?.source !== 'synthetic')
+  const videoData = useVideoMapData(adaptive.data, config?.intersection_id)
+  const videoMap = Boolean(videoData) || videoControl || (workspace === 'sigap' && adaptive.data?.source !== 'synthetic')
   // Fetch synthetic poses only while they are actually displayed. The independent
   // ATCS status feed keeps checking the real controller in every workspace.
   const needsTraffic = workspace !== 'simulation' && !videoMap
@@ -59,7 +59,7 @@ export function Monitor({ session, onLogout, signingOut, logoutError }: {
   const selectedSignal = signals?.[selected] ?? 'unknown'
   const filtered = [...journal.events].reverse().filter(event => eventFilter === 'all'
     || (eventFilter === 'phase' ? event.event_type === 'phase_changed' : ['fault', 'recovered', 'clearance_held', 'service_stopped'].includes(event.event_type)))
-  const visibleEvents = expandedHistory ? filtered : filtered.slice(0, 6)
+  const visibleEvents = filtered.slice(0, 20)
   const phaseText = live?.phase ? phaseNames[live.phase] : 'Belum diketahui'
 
   return <>
@@ -67,7 +67,7 @@ export function Monitor({ session, onLogout, signingOut, logoutError }: {
     <header className="app-header">
       <a className="brand" href="#content" aria-label="SIGAP — monitor persimpangan"><SigapLogo /></a>
       <span className="header-context">Ruang kendali persimpangan</span>
-      <nav aria-label="Navigasi monitor"><a href="#history">Riwayat</a><a href="#services" onClick={() => { const details = document.querySelector<HTMLDetailsElement>('#services'); if (details) details.open = true }}>Layanan</a></nav>
+      <nav aria-label="Navigasi monitor"><a href="/analytics">Analitik &amp; dampak</a><a href="/history">Riwayat lengkap</a><a href="#services" onClick={() => { const details = document.querySelector<HTMLDetailsElement>('#services'); if (details) details.open = true }}>Layanan</a></nav>
       <span className="environment-tag">Prototipe lokal</span>
       <details className="operator-menu">
         <summary><span className="operator-avatar" aria-hidden="true">{session.operator.display_name.slice(0, 1).toUpperCase()}</span><span>{session.operator.display_name}<small>Operator pemantauan</small></span><span aria-hidden="true">⌄</span></summary>
@@ -137,12 +137,13 @@ export function Monitor({ session, onLogout, signingOut, logoutError }: {
         </aside>
       </div>
       <section className="history-panel" id="history" aria-labelledby="history-title">
-        <div className="section-toolbar"><div><h2 id="history-title">Riwayat kejadian</h2><p>Sesi ATCS saat ini · {journal.events.length} kejadian tersimpan di tampilan</p></div><label className="history-filter">Tampilkan<select value={eventFilter} onChange={event => { setEventFilter(event.target.value as typeof eventFilter); setExpandedHistory(false) }}><option value="all">Semua kejadian</option><option value="phase">Pergantian fase</option><option value="incident">Gangguan &amp; penahanan</option></select></label></div>
+        <div className="section-toolbar"><div><h2 id="history-title">Riwayat kejadian</h2><p>20 kejadian terakhir · sesi ATCS saat ini</p></div><label className="history-filter">Tampilkan<select value={eventFilter} onChange={event => { setEventFilter(event.target.value as typeof eventFilter) }}><option value="all">Semua kejadian</option><option value="phase">Pergantian fase</option><option value="incident">Gangguan &amp; penahanan</option></select></label></div>
         {journalState === 'unavailable' && <p className="history-note" role="status">Pembaruan riwayat terputus. Baris yang tersimpan merupakan kejadian sebelumnya.</p>}
-        {journal.truncated && <p className="history-note">Menampilkan maksimal 100 kejadian terbaru. Sebagian riwayat awal tidak tersedia di tampilan.</p>}
+        <div className="history-actions"><button aria-expanded={historyVisible} onClick={() => setHistoryVisible(v => !v)}>{historyVisible ? 'Sembunyikan kejadian' : 'Tampilkan kejadian'}</button><a href="/history">Buka arsip riwayat lengkap</a></div>
+        <div hidden={!historyVisible}>
         {visibleEvents.length ? <div className="table-scroll"><table className="event-table"><thead><tr><th scope="col">Waktu (WIB)</th><th scope="col">Kejadian</th><th scope="col">Fase / arah</th><th scope="col">Keterangan pengendali</th></tr></thead><tbody>{visibleEvents.map(event => <tr key={event.event_id}><td><time dateTime={event.occurred_at}>{localTime(event.occurred_at)}</time></td><th scope="row">{eventNames[event.event_type]}</th><td><span className={`event-phase event-phase--${event.phase}`}>{phaseNames[event.phase]}{event.active_approach ? ` · ${event.active_approach}` : ''}</span></td><td>{event.reason}</td></tr>)}</tbody></table></div>
           : <p className="empty-history">{!monitor.runId ? 'Riwayat akan muncul setelah sesi ATCS terverifikasi.' : journalState === 'loading' ? 'Memuat riwayat sesi…' : journalState === 'unavailable' ? 'Riwayat belum dapat diperbarui.' : 'Belum ada kejadian untuk pilihan ini.'}</p>}
-        {filtered.length > 6 && <div className="history-actions"><button onClick={() => setExpandedHistory(value => !value)}>{expandedHistory ? 'Ringkas riwayat' : `Lihat ${filtered.length} kejadian`}</button></div>}
+        </div>
       </section>
       </div>
       <Readiness snapshot={snapshot} />

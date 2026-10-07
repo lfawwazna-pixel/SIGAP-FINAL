@@ -121,6 +121,27 @@
     "ApproachMeasurement": {
       "additionalProperties": false,
       "properties": {
+        "queue_visibility": {
+          "default": "partial",
+          "enum": [
+            "full",
+            "partial"
+          ],
+          "title": "Queue Visibility",
+          "type": "string"
+        },
+        "occupancy_ratio": {
+          "default": 0,
+          "maximum": 1,
+          "minimum": 0,
+          "title": "Occupancy Ratio",
+          "type": "number"
+        },
+        "queue_reaches_boundary": {
+          "default": false,
+          "title": "Queue Reaches Boundary",
+          "type": "boolean"
+        },
         "observed_at": {
           "format": "date-time",
           "title": "Observed At",
@@ -159,6 +180,9 @@
         }
       },
       "required": [
+        "queue_visibility",
+        "occupancy_ratio",
+        "queue_reaches_boundary",
         "observed_at",
         "usable",
         "controlled_count",

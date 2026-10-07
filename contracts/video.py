@@ -10,6 +10,7 @@ class Point(Contract):
 
 
 class VideoCalibration(Contract):
+    upstream_queue_visible: bool = False
     lanes: dict[Literal['outer', 'middle', 'inner'], list[Point]] = Field(min_length=3, max_length=3)
     stop_line: list[Point] = Field(min_length=2, max_length=2)
 
@@ -30,6 +31,7 @@ class VideoCalibration(Contract):
 
 
 class TrackedVehicle(Contract):
+    coasted: bool = False
     track_id: int = Field(ge=1)
     class_name: Literal['car', 'motorcycle', 'bus', 'truck', 'ambulance', 'fire_truck']
     confidence: float = Field(ge=0, le=1, allow_inf_nan=False)

@@ -15,9 +15,12 @@ from backend.app.simulation import Experiments, router as simulation_router
 from backend.app.control import ControlAdapter, router as control_router
 from backend.app.adaptive import AdaptiveSender, router as adaptive_router
 from backend.app.video import VideoHub, router as video_router
+from backend.app.analytics import AnalyticsService, router as analytics_router
 from contracts.configuration import load_config
 from contracts.models import AtcsStatus, Capabilities, Health, IntersectionConfig, TrafficEvents
 from contracts.traffic import TrafficView
+from contracts.history import EventArchivePage
+from typing import Literal
 
 
 def create_app(settings: Settings | None = None) -> FastAPI:
@@ -31,9 +34,11 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         await app.state.experiments.start()
         app.state.video.start()
         await app.state.adaptive.start(app.state.atcs_client)
+        await app.state.analytics.start()
         try:
             yield
         finally:
+            await app.state.analytics.stop()
             await app.state.adaptive.stop()
             await app.state.video.stop()
             await app.state.experiments.stop()
@@ -54,6 +59,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.state.video = VideoHub(settings)
     app.state.adaptive.video = app.state.video
     app.include_router(video_router)
+    app.state.analytics = AnalyticsService(settings, config)
+    app.include_router(analytics_router)
 
     @app.middleware("http")
     async def private_responses(request: Request, call_next):
@@ -104,7 +111,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             parsed = model.model_validate(response.json())
             if isinstance(parsed, Health) and parsed.service != "atcs":
                 raise ValueError("Wrong service")
-            if isinstance(parsed, (AtcsStatus, TrafficEvents, TrafficView)) and parsed.intersection_id != config.intersection_id:
+            if isinstance(parsed, (AtcsStatus, TrafficEvents, TrafficView, EventArchivePage)) and parsed.intersection_id != config.intersection_id:
                 raise ValueError("Wrong intersection")
             return JSONResponse(parsed.model_dump(mode="json"), status_code=response.status_code,
                                 headers={"Cache-Control": "no-store"})
@@ -127,6 +134,14 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         if run_id is not None:
             params["run_id"] = str(run_id)
         return await get_atcs("/events", TrafficEvents, params)
+
+    @app.get('/api/history', response_model=EventArchivePage, dependencies=[Depends(require_operator)])
+    async def history(before: int | None = Query(default=None, ge=1), limit: int = Query(default=50, ge=1, le=100),
+                      event_filter: Literal['all','phase','incident'] = 'all'):
+        params = {'limit':limit,'event_filter':event_filter}
+        if before is not None:
+            params['before'] = before
+        return await get_atcs('/history', EventArchivePage, params)
 
     @app.get('/api/atcs/traffic', response_model=TrafficView, dependencies=[Depends(require_operator)])
     async def atcs_traffic():

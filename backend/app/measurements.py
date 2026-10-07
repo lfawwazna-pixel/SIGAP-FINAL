@@ -29,6 +29,26 @@ def line_side(x, y, line):
     return (b.x-a.x)*(y-a.y)-(b.y-a.y)*(x-a.x)
 
 
+def polygon_area(points):
+    return abs(sum(a.x*b.y-b.x*a.y for a,b in zip(points,points[1:]+points[:1])))/2
+
+def clipped_box_area(box, polygon):
+    points = [(p.x,p.y) for p in polygon]
+    for axis, boundary, keep_above in ((0,box[0],True),(0,box[2],False),(1,box[1],True),(1,box[3],False)):
+        result = []
+        for a,b in zip(points, points[1:]+points[:1]):
+            ia,ib = (a[axis]>=boundary, b[axis]>=boundary) if keep_above else (a[axis]<=boundary,b[axis]<=boundary)
+            if ia:
+                result.append(a)
+            if ia != ib:
+                t = (boundary-a[axis])/(b[axis]-a[axis])
+                result.append((a[0]+t*(b[0]-a[0]),a[1]+t*(b[1]-a[1])))
+        points = result
+        if not points:
+            return 0.0
+    return abs(sum(a[0]*b[1]-b[0]*a[1] for a,b in zip(points,points[1:]+points[:1])))/2
+
+
 def map_poses(direction, generation, entries):
     """Keep every track visible on its camera's approach, including outside the ROI.
 
@@ -113,6 +133,9 @@ class VideoMeasurements:
                 issues[direction] = 'Video atau tracking belum mutakhir.'
                 continue
             calibration = channel.calibration
+            value['queue_visibility'] = 'full' if calibration and calibration.upstream_queue_visible else 'partial'
+            occupied_area = 0.0
+            controlled_area = sum(polygon_area(calibration.lanes[l]) for l in ('middle','inner')) if calibration else 0.0
             if not calibration:
                 issues[direction] = 'Tandai tiga lajur dan garis henti dahulu. Kendaraan tetap ditampilkan secara skematis.'
             generation = (channel.tracker_session, calibration.model_dump_json() if calibration else '')
@@ -168,12 +191,16 @@ class VideoMeasurements:
                 if fresh_sample:
                     captured = channel.tracked_at
                     points = history['points']
-                    points.append((captured, x, y))
+                    if not track.coasted:
+                        points.append((captured, x, y))
+                    if not points:
+                        points.append((captured, x, y))
                     while len(points) > 1 and captured-points[0][0] > 1.5:
                         points.popleft()
-                    span = captured-points[0][0]
-                    stable = span >= .8 and hypot(x-points[0][1], y-points[0][2])/span <= .015
-                    history['waiting'] = (history['waiting'] if history['waiting'] is not None else points[0][0]) if stable else None
+                    if not track.coasted:
+                        span = captured-points[0][0]
+                        stable = span >= .8 and hypot(x-points[0][1], y-points[0][2])/span <= .015
+                        history['waiting'] = (history['waiting'] if history['waiting'] is not None else points[0][0]) if stable else None
                     history['last'] = captured
                 stopped = history['waiting'] is not None
                 entries.append(dict(track=track, lane=history['display_lane'], distance=distance, stopped=stopped, passed=passed))
@@ -183,6 +210,9 @@ class VideoMeasurements:
                     value['slip_count'] += 1
                 else:
                     value['controlled_count'] += 1
+                    occupied_area += clipped_box_area(track.bbox, calibration.lanes[lane])
+                    if stopped and distance >= 500:
+                        value['queue_reaches_boundary'] = True
                     if stopped:
                         value['queue_count'] += 1
                         value['oldest_wait_seconds'] = max(value['oldest_wait_seconds'],
@@ -193,6 +223,7 @@ class VideoMeasurements:
             for identity in list(histories):
                 if now-histories[identity]['last'] > 3:
                     del histories[identity]
+            value['occupancy_ratio'] = min(1.0, occupied_area/max(controlled_area, .0001))
             value['usable'] = calibration is not None and not ambiguous
             if ambiguous:
                 issues[direction] = 'Lajur bertumpang tindih atau garis henti membelah area pengamatan.'

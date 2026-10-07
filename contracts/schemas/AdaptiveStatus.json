@@ -121,6 +121,20 @@
     "AdaptivePolicyConfig": {
       "additionalProperties": false,
       "properties": {
+        "video_baseline_floor_ratio": {
+          "default": 0.75,
+          "maximum": 1,
+          "minimum": 0.1,
+          "title": "Video Baseline Floor Ratio",
+          "type": "number"
+        },
+        "video_maximum_drop_ratio": {
+          "default": 0.2,
+          "maximum": 0.5,
+          "minimum": 0.01,
+          "title": "Video Maximum Drop Ratio",
+          "type": "number"
+        },
         "minimum_green": {
           "default": 10,
           "maximum": 60,
@@ -179,6 +193,8 @@
         }
       },
       "required": [
+        "video_baseline_floor_ratio",
+        "video_maximum_drop_ratio",
         "minimum_green",
         "maximum_green",
         "queue_weight",
@@ -194,6 +210,27 @@
     "ApproachMeasurement": {
       "additionalProperties": false,
       "properties": {
+        "queue_visibility": {
+          "default": "partial",
+          "enum": [
+            "full",
+            "partial"
+          ],
+          "title": "Queue Visibility",
+          "type": "string"
+        },
+        "occupancy_ratio": {
+          "default": 0,
+          "maximum": 1,
+          "minimum": 0,
+          "title": "Occupancy Ratio",
+          "type": "number"
+        },
+        "queue_reaches_boundary": {
+          "default": false,
+          "title": "Queue Reaches Boundary",
+          "type": "boolean"
+        },
         "observed_at": {
           "format": "date-time",
           "title": "Observed At",
@@ -232,6 +269,9 @@
         }
       },
       "required": [
+        "queue_visibility",
+        "occupancy_ratio",
+        "queue_reaches_boundary",
         "observed_at",
         "usable",
         "controlled_count",

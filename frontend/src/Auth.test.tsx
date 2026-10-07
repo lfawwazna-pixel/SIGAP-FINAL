@@ -30,6 +30,15 @@ beforeEach(() => {
 afterEach(() => { cleanup(); vi.useRealTimers(); vi.unstubAllGlobals(); vi.restoreAllMocks() })
 
 describe('operator authentication', () => {
+  it('keeps the authenticated page mounted for navigation within a page', async () => {
+    authenticated = true
+    render(<App />); await flush()
+    const reads = [...requested]
+    window.history.pushState(null, '', '/monitor#history')
+    window.dispatchEvent(new PopStateEvent('popstate')); await flush()
+    expect(requested).toEqual(reads)
+    expect(screen.getByText('Monitor terlindungi')).toBeTruthy()
+  })
   it('shows only the login after anonymous session check, with no protected API reads', async () => {
     window.history.replaceState(null, '', '/monitor')
     render(<App />)

@@ -7,6 +7,9 @@ from contracts.vehicles import VehicleView
 
 
 class ApproachMeasurement(Contract):
+    queue_visibility: Literal['full', 'partial'] = 'partial'
+    occupancy_ratio: float = Field(default=0, ge=0, le=1)
+    queue_reaches_boundary: bool = False
     observed_at: AwareDatetime
     usable: bool
     controlled_count: int = Field(ge=0, le=10000)
@@ -37,6 +40,8 @@ class MeasurementBatch(Contract):
 
 
 class AdaptivePolicyConfig(Contract):
+    video_baseline_floor_ratio: float = Field(default=.75, ge=.1, le=1)
+    video_maximum_drop_ratio: float = Field(default=.2, ge=.01, le=.5)
     minimum_green: float = Field(default=10, ge=1, le=60)
     maximum_green: float = Field(default=60, ge=1, le=180)
     queue_weight: float = Field(default=4, ge=0, le=100)

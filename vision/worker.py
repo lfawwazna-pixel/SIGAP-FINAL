@@ -8,6 +8,7 @@ from pathlib import Path
 import sys
 import time
 from types import SimpleNamespace
+from vision.stability import TrackStabilizer
 
 os.environ.setdefault('YOLO_AUTOINSTALL', 'false')
 os.environ.setdefault('YOLO_CONFIG_DIR', str(Path.cwd() / 'work' / 'yolo-settings'))
@@ -54,7 +55,7 @@ def main():
                 trackers = {k: v for k, v in trackers.items() if k[0] != key[0]}
                 args = SimpleNamespace(track_high_thresh=.25, track_low_thresh=.1,
                     new_track_thresh=.35, track_buffer=2 * request['fps'], match_thresh=.8, fuse_score=True)
-                trackers[key] = dict(tracker=BYTETracker(args), counter=0, last_frame=None)
+                trackers[key] = dict(tracker=BYTETracker(args), counter=0, last_frame=None, stable=TrackStabilizer())
             state = trackers[key]
             tracker = state['tracker']
             gap = request['frame_id'] - state['last_frame'] if state['last_frame'] is not None else 1
@@ -62,6 +63,9 @@ def main():
                 raise ValueError('Frame must advance within a camera session')
             if gap > 2 * request['fps']:
                 tracker.reset()
+                state['stable'].tracks.clear()
+                state['stable'].aliases.clear()
+                state['stable'].last_time = None
             else:
                 # Expire lost tracks according to source time, including skipped frames.
                 tracker.frame_id += gap - 1
@@ -81,15 +85,19 @@ def main():
                 if not np.isfinite(row[:7]).all():
                     continue
                 track_id = int(track_id)
+                objects.append(dict(track_id=track_id, class_name=name, confidence=float(score),
+                    bbox=[float(max(0, min(1, v))) for v in (x1/width, y1/height, x2/width, y2/height)]))
+            objects = state['stable'].update(objects, request['frame_id']/request['fps'])
+            for obj in objects:
+                track_id, name = obj['track_id'], obj['class_name']
+                x1,y1,x2,y2 = [v*s for v,s in zip(obj['bbox'], (width,height,width,height))]
                 color = ((37 * track_id + 80) % 180 + 60, (67 * track_id) % 180 + 60, (97 * track_id) % 180 + 60)
                 if name in ('ambulance', 'fire_truck'):
                     color = (20, 90, 245)
                 a, b, c, d = [int(v) for v in (x1, y1, x2, y2)]
                 cv2.rectangle(frame, (a, b), (c, d), color, 2)
-                text = f'{name} #{request["direction"]}:{track_id}'
+                text = f'{name} #{request["direction"]}:{track_id}' + (' ~' if obj['coasted'] else '')
                 cv2.putText(frame, text, (max(0, a), max(12, b - 4)), cv2.FONT_HERSHEY_SIMPLEX, .36, color, 1, cv2.LINE_AA)
-                objects.append(dict(track_id=track_id, class_name=name, confidence=float(score),
-                    bbox=[float(max(0, min(1, v))) for v in (x1/width, y1/height, x2/width, y2/height)]))
             ok, encoded = cv2.imencode('.jpg', frame, [cv2.IMWRITE_JPEG_QUALITY, 80])
             if not ok:
                 raise ValueError('JPEG encoding failed')

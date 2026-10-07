@@ -1,0 +1,202 @@
+{
+  "$defs": {
+    "TrafficEvent": {
+      "additionalProperties": false,
+      "properties": {
+        "event_id": {
+          "title": "Event Id",
+          "type": "string"
+        },
+        "intersection_id": {
+          "title": "Intersection Id",
+          "type": "string"
+        },
+        "run_id": {
+          "format": "uuid",
+          "title": "Run Id",
+          "type": "string"
+        },
+        "event_type": {
+          "enum": [
+            "service_started",
+            "service_stopped",
+            "phase_changed",
+            "clearance_held",
+            "clearance_released",
+            "control_changed",
+            "fault",
+            "recovered"
+          ],
+          "title": "Event Type",
+          "type": "string"
+        },
+        "source": {
+          "enum": [
+            "backend",
+            "atcs",
+            "adaptive_control"
+          ],
+          "title": "Source",
+          "type": "string"
+        },
+        "sequence_number": {
+          "minimum": 0,
+          "title": "Sequence Number",
+          "type": "integer"
+        },
+        "occurred_at": {
+          "format": "date-time",
+          "title": "Occurred At",
+          "type": "string"
+        },
+        "simulation_time_seconds": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Simulation Time Seconds"
+        },
+        "reason": {
+          "minLength": 1,
+          "title": "Reason",
+          "type": "string"
+        },
+        "previous_phase": {
+          "anyOf": [
+            {
+              "enum": [
+                "green",
+                "yellow",
+                "all_red"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Previous Phase"
+        },
+        "previous_approach": {
+          "anyOf": [
+            {
+              "enum": [
+                "U",
+                "T",
+                "S",
+                "B"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Previous Approach"
+        },
+        "phase": {
+          "enum": [
+            "green",
+            "yellow",
+            "all_red"
+          ],
+          "title": "Phase",
+          "type": "string"
+        },
+        "active_approach": {
+          "anyOf": [
+            {
+              "enum": [
+                "U",
+                "T",
+                "S",
+                "B"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Active Approach"
+        }
+      },
+      "required": [
+        "event_id",
+        "intersection_id",
+        "run_id",
+        "event_type",
+        "source",
+        "sequence_number",
+        "occurred_at",
+        "simulation_time_seconds",
+        "reason",
+        "previous_phase",
+        "previous_approach",
+        "phase",
+        "active_approach"
+      ],
+      "title": "TrafficEvent",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "intersection_id": {
+      "title": "Intersection Id",
+      "type": "string"
+    },
+    "events": {
+      "items": {
+        "$ref": "#/$defs/TrafficEvent"
+      },
+      "title": "Events",
+      "type": "array"
+    },
+    "next_before": {
+      "anyOf": [
+        {
+          "minimum": 1,
+          "type": "integer"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "title": "Next Before"
+    },
+    "has_more": {
+      "title": "Has More",
+      "type": "boolean"
+    },
+    "generated_at": {
+      "format": "date-time",
+      "title": "Generated At",
+      "type": "string"
+    },
+    "filter": {
+      "enum": [
+        "all",
+        "phase",
+        "incident"
+      ],
+      "title": "Filter",
+      "type": "string"
+    }
+  },
+  "required": [
+    "intersection_id",
+    "events",
+    "next_before",
+    "has_more",
+    "generated_at",
+    "filter"
+  ],
+  "title": "EventArchivePage",
+  "type": "object"
+}

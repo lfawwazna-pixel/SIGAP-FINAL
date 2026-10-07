@@ -9,7 +9,7 @@ from contracts.models import AtcsStatus, ConflictArea, IntersectionConfig, Traff
 
 class FixedTimeEngine:
     def __init__(self, config: IntersectionConfig, *, now: float, at: datetime,
-                 conflict: ConflictArea, event_capacity: int = 1000):
+                 conflict: ConflictArea, event_capacity: int = 1000, event_sink=None):
         if not math.isfinite(now) or event_capacity < 1:
             raise ValueError("Invalid clock or journal capacity")
         self.config = config.model_copy(deep=True)
@@ -25,20 +25,24 @@ class FixedTimeEngine:
         self.conflict = conflict.model_copy(deep=True)
         self.sequence_number = 0
         self.reason = f"Startup: semua merah minimum sebelum pendekat {config.fixed_time.sequence[0]}."
+        self.event_sink = event_sink
         self._event_sequence = 0
         self._events: deque[TrafficEvent] = deque(maxlen=event_capacity)
         self._record("service_started", self.reason, None, None)
 
     def _record(self, event_type, reason, previous_phase, previous_approach):
         self._event_sequence += 1
-        self._events.append(TrafficEvent(
+        event = TrafficEvent(
             event_id=f"{self.run_id}:{self._event_sequence}", run_id=self.run_id,
             intersection_id=self.config.intersection_id, event_type=event_type, source="atcs",
             sequence_number=self._event_sequence, occurred_at=self.updated_at,
             simulation_time_seconds=self.last_tick - self.started, reason=reason,
             previous_phase=previous_phase, previous_approach=previous_approach,
             phase=self.phase, active_approach=self.active_approach,
-        ))
+        )
+        self._events.append(event)
+        if self.event_sink:
+            self.event_sink(event)
 
     def _transition(self, phase, approach, duration, reason):
         previous = (self.phase, self.active_approach)

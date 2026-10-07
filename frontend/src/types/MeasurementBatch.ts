@@ -4,6 +4,9 @@ export type IntersectionId = string;
 export type Source = "synthetic" | "recording" | "cctv";
 export type SourceSession = string;
 export type Sequence = number;
+export type QueueVisibility = "full" | "partial";
+export type OccupancyRatio = number;
+export type QueueReachesBoundary = boolean;
 export type ObservedAt = string;
 export type Usable = boolean;
 export type ControlledCount = number;
@@ -23,6 +26,9 @@ export interface Approaches {
   [k: string]: ApproachMeasurement;
 }
 export interface ApproachMeasurement {
+  queue_visibility: QueueVisibility;
+  occupancy_ratio: OccupancyRatio;
+  queue_reaches_boundary: QueueReachesBoundary;
   observed_at: ObservedAt;
   usable: Usable;
   controlled_count: ControlledCount;

@@ -25,10 +25,13 @@ services:
       SIGAP_CONFIG_PATH: /app/configs/intersection.json
       SIGAP_CONTROL_API_KEY: ${SIGAP_CONTROL_API_KEY:-}
       ATCS_ENABLE_TEST_SOURCE: ${ATCS_ENABLE_TEST_SOURCE:-false}
+      ATCS_MAXIMUM_GREEN_SECONDS: ${ATCS_MAXIMUM_GREEN_SECONDS:-180}
+      SIGAP_EVENT_ARCHIVE: /app/work/history/events.sqlite3
     ports:
       - "127.0.0.1:${ATCS_PORT:-8001}:8001"
     volumes:
       - ./configs:/app/configs:ro
+      - sigap_history:/app/work/history
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8001/health',timeout=2)"]
       interval: 10s
@@ -53,11 +56,16 @@ services:
       SIGAP_SESSION_SECONDS: ${SIGAP_SESSION_SECONDS:-28800}
       SIGAP_COOKIE_SECURE: ${SIGAP_COOKIE_SECURE:-false}
       SIGAP_ALLOWED_ORIGINS: '${SIGAP_ALLOWED_ORIGINS:-["http://127.0.0.1:5173","http://localhost:5173"]}'
+      SIGAP_TOMTOM_API_KEY: ${SIGAP_TOMTOM_API_KEY:-}
+      SIGAP_TOMTOM_POLL_SECONDS: ${SIGAP_TOMTOM_POLL_SECONDS:-120}
+      SIGAP_ANALYTICS_CONFIG: /app/configs/traffic-analytics.json
+      SIGAP_ANALYTICS_STORE: /app/work/analytics/traffic.sqlite3
     ports:
       - "127.0.0.1:${BACKEND_PORT:-8000}:8000"
     volumes:
       - ./configs:/app/configs:ro
       - sigap_media:/app/work/media
+      - sigap_analytics:/app/work/analytics
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/api/health/live',timeout=2)"]
       interval: 10s
@@ -76,3 +84,5 @@ services:
 volumes:
   sigap_pgdata:
   sigap_media:
+  sigap_history:
+  sigap_analytics:

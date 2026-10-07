@@ -1,0 +1,10 @@
+{
+  "intersection_id": "SIGAP-KIRCON-01",
+  "location_basis": "Cross Street TomTom Search 2026-10-07: Jalan Ibrahim Adjie & Jalan Soekarno Hatta, -6.945316,107.641841. Titik pendekat sekitar 150-190 m dari simpang; ruas hasil snap perlu diperiksa, termasuk flyover.",
+  "points": {
+    "U": {"label": "Ibrahim Adjie · Utara", "latitude": -6.9439, "longitude": 107.64182},
+    "T": {"label": "Soekarno Hatta · Timur", "latitude": -6.94520, "longitude": 107.64350},
+    "S": {"label": "Ibrahim Adjie · Selatan", "latitude": -6.94665, "longitude": 107.64195},
+    "B": {"label": "Soekarno Hatta · Barat", "latitude": -6.94548, "longitude": 107.64015}
+  }
+}

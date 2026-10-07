@@ -6,5 +6,7 @@
   "age_weight": 0.5,
   "service_age_target": 120,
   "seconds_per_queued_vehicle": 2,
-  "data_timeout": 3
+  "data_timeout": 3,
+  "video_baseline_floor_ratio": 0.75,
+  "video_maximum_drop_ratio": 0.2
 }

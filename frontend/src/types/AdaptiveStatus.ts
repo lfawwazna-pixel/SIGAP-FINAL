@@ -5,6 +5,8 @@ export type Source = "synthetic" | "recording" | "cctv";
 export type Fault = "none" | "frozen_data" | "invalid_data" | "sender_stopped";
 export type Status = "disabled" | "ready" | "active" | "unavailable";
 export type Message = string;
+export type VideoBaselineFloorRatio = number;
+export type VideoMaximumDropRatio = number;
 export type MinimumGreen = number;
 export type MaximumGreen = number;
 export type QueueWeight = number;
@@ -17,6 +19,9 @@ export type IntersectionId = string;
 export type Source1 = "synthetic" | "recording" | "cctv";
 export type SourceSession = string;
 export type Sequence = number;
+export type QueueVisibility = "full" | "partial";
+export type OccupancyRatio = number;
+export type QueueReachesBoundary = boolean;
 export type ObservedAt = string;
 export type Usable = boolean;
 export type ControlledCount = number;
@@ -65,6 +70,8 @@ export interface AdaptiveStatus {
   map_vehicles: MapVehicles;
 }
 export interface AdaptivePolicyConfig {
+  video_baseline_floor_ratio: VideoBaselineFloorRatio;
+  video_maximum_drop_ratio: VideoMaximumDropRatio;
   minimum_green: MinimumGreen;
   maximum_green: MaximumGreen;
   queue_weight: QueueWeight;
@@ -85,6 +92,9 @@ export interface Approaches {
   [k: string]: ApproachMeasurement;
 }
 export interface ApproachMeasurement {
+  queue_visibility: QueueVisibility;
+  occupancy_ratio: OccupancyRatio;
+  queue_reaches_boundary: QueueReachesBoundary;
   observed_at: ObservedAt;
   usable: Usable;
   controlled_count: ControlledCount;

@@ -5,6 +5,9 @@ export type MeasurementSequence = number;
 export type Approach = ("U" | "T" | "S" | "B") | null;
 export type GreenSeconds = number | null;
 export type Reason = string;
+export type QueueVisibility = "full" | "partial";
+export type OccupancyRatio = number;
+export type QueueReachesBoundary = boolean;
 export type ObservedAt = string;
 export type Usable = boolean;
 export type ControlledCount = number;
@@ -118,6 +121,9 @@ export interface Inputs {
   [k: string]: ApproachMeasurement;
 }
 export interface ApproachMeasurement {
+  queue_visibility: QueueVisibility;
+  occupancy_ratio: OccupancyRatio;
+  queue_reaches_boundary: QueueReachesBoundary;
   observed_at: ObservedAt;
   usable: Usable;
   controlled_count: ControlledCount;

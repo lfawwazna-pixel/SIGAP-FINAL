@@ -92,6 +92,30 @@ def fresh_video_hub(clock, monkeypatch, tmp_path, marked=True):
     return hub
 
 
+def test_temporarily_held_boxes_keep_map_count_without_creating_false_stopped_queue(clock, monkeypatch, tmp_path):
+    hub = fresh_video_hub(clock, monkeypatch, tmp_path)
+    channel = hub.channels['U']
+    provider = VideoMeasurements('test')
+    vehicle = TrackedVehicle(track_id=10, class_name='car', confidence=.9, bbox=[.4,.2,.5,.4])
+    channel.tracks = [vehicle]
+    initial = provider.snapshot(hub)
+    assert initial.approaches['U'].queue_visibility == 'partial'
+    assert initial.approaches['U'].occupancy_ratio > 0
+    identity = provider.vehicles[0].id
+    for _ in range(5):
+        clock.advance(.2)
+        channel.tracked_at = channel.received = clock.monotonic()
+        channel.tracked_id += 1
+        channel.tracks = [vehicle.model_copy(update={'coasted': True})]
+        batch = provider.snapshot(hub)
+        assert batch.approaches['U'].controlled_count == 1
+        assert batch.approaches['U'].queue_count == 0
+        assert len(provider.vehicles) == len(channel.tracks) == 1
+        assert provider.vehicles[0].id == identity
+    channel.calibration.upstream_queue_visible = True
+    assert provider.snapshot(hub).approaches['U'].queue_visibility == 'full'
+
+
 def test_all_tracks_appear_without_calibration_on_their_camera_approach(clock, monkeypatch, tmp_path):
     hub = fresh_video_hub(clock, monkeypatch, tmp_path, marked=False)
     classes = ['car', 'motorcycle', 'bus', 'truck', 'ambulance', 'fire_truck']

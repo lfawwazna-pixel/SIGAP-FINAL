@@ -26,6 +26,11 @@
     "TrackedVehicle": {
       "additionalProperties": false,
       "properties": {
+        "coasted": {
+          "default": false,
+          "title": "Coasted",
+          "type": "boolean"
+        },
         "track_id": {
           "minimum": 1,
           "title": "Track Id",
@@ -60,6 +65,7 @@
         }
       },
       "required": [
+        "coasted",
         "track_id",
         "class_name",
         "confidence",
@@ -165,6 +171,11 @@
     "VideoCalibration": {
       "additionalProperties": false,
       "properties": {
+        "upstream_queue_visible": {
+          "default": false,
+          "title": "Upstream Queue Visible",
+          "type": "boolean"
+        },
         "lanes": {
           "additionalProperties": {
             "items": {
@@ -195,6 +206,7 @@
         }
       },
       "required": [
+        "upstream_queue_visible",
         "lanes",
         "stop_line"
       ],

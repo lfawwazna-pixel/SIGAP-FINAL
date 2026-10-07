@@ -193,3 +193,19 @@ describe('journal session isolation', () => {
     expect(requests.at(-1)).toContain(`run_id=${secondRunId}&after=0`)
   })
 })
+
+it('limits monitor history to twenty newest events and can hide them while linking the full archive', async () => {
+  const events = Array.from({length:30},(_,i)=>eventFixture({event_id:`${runId}:${i+1}`,sequence_number:i+1,reason:`Catatan ${i+1}`}))
+  const previous=vi.mocked(fetch).getMockImplementation()!
+  vi.mocked(fetch).mockImplementation((input)=>String(input).includes('/atcs/events?') ? respond(pageFixture({events,latest_sequence:30,next_after:30})) : previous(input))
+  render(<App />);await flush()
+  const history=within(screen.getByRole('region',{name:'Riwayat kejadian'}))
+  expect(history.getByRole('table').querySelectorAll('tbody tr')).toHaveLength(20)
+  expect(history.getByText('Catatan 30')).toBeTruthy()
+  expect(history.queryByText('Catatan 10')).toBeNull()
+  expect(history.getByRole('link',{name:'Buka arsip riwayat lengkap'}).getAttribute('href')).toBe('/history')
+  fireEvent.click(history.getByRole('button',{name:'Sembunyikan kejadian'}))
+  expect(history.queryByRole('table')).toBeNull()
+  fireEvent.click(history.getByRole('button',{name:'Tampilkan kejadian'}))
+  expect(history.getByRole('table').querySelectorAll('tbody tr')).toHaveLength(20)
+})
