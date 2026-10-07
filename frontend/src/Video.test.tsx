@@ -6,6 +6,7 @@ import { respond, runId, secondRunId } from './testFixtures'
 
 let state: VideoStatus
 let frameSession: string
+let frameCount: string | null
 let posts: Record<string, unknown>[]
 const flush = async (ms = 0) => { await act(async () => { await vi.advanceTimersByTimeAsync(ms) }) }
 const panel = (workspace: 'atcs'|'sigap'|'simulation', mayControl = true) => <VideoPanel workspace={workspace} csrf={'a'.repeat(64)} mayControl={mayControl} />
@@ -15,6 +16,7 @@ beforeEach(() => {
   Object.defineProperty(URL,'createObjectURL',{configurable:true,value:vi.fn(() => 'blob:shared-preview')})
   Object.defineProperty(URL,'revokeObjectURL',{configurable:true,value:vi.fn()})
   frameSession = runId
+  frameCount = null
   posts = []
   state = {preview_fps:5,channels:(['U','T','S','B'] as const).map(direction => ({direction,source:'recording',
     source_session:runId,state:'playing',label:`Rekaman ${direction}`,frame_id:12,loop_count:0,media_seconds:2.4,
@@ -25,7 +27,7 @@ beforeEach(() => {
       return respond(state.channels[0])
     }
     if (url.endsWith('/video')) return respond(state)
-    return new Response(new Blob(['jpeg'],{type:'image/jpeg'}),{headers:{'Content-Type':'image/jpeg','X-Source-Session':frameSession,'X-Frame-Id':'12','X-Media-Seconds':'2.4','X-Tracking':url.includes('overlay=true') && state.channels[0].detection_ready ? 'ByteTrack' : 'none'}})
+    return new Response(new Blob(['jpeg'],{type:'image/jpeg'}),{headers:{'Content-Type':'image/jpeg','X-Source-Session':frameSession,'X-Frame-Id':'12','X-Media-Seconds':'2.4',...(frameCount === null ? {} : {'X-Track-Count':frameCount}),'X-Tracking':url.includes('overlay=true') && state.channels[0].detection_ready ? 'ByteTrack' : 'none'}})
   }))
 })
 afterEach(() => {cleanup();vi.useRealTimers();vi.unstubAllGlobals();vi.restoreAllMocks()})
@@ -46,6 +48,7 @@ it('keeps the same video element/session across ATCS SIGAP and simulation withou
 })
 
 it('requests tracked frames only in SIGAP, displays measured FPS and retains the shared session', async () => {
+  frameCount = '1'
   state.channels[0].detection_ready = true
   state.channels[0].tracking = {state:'tracking',source_session:runId,frame_id:12,age_seconds:0,
     processing_fps:8.5,observed_fps:4.8,device:'cpu',message:'YOLO + ByteTrack berjalan.',
@@ -59,6 +62,25 @@ it('requests tracked frames only in SIGAP, displays measured FPS and retains the
   expect(screen.getByAltText('Video pendekat Utara')).toBe(img)
   expect(vi.mocked(fetch).mock.calls.some(([url]) => String(url).endsWith('frame?overlay=false'))).toBe(true)
   expect(posts).toHaveLength(0)
+})
+
+it('shows the count from the displayed JPEG instead of another status frame and clears it with stale images', async () => {
+  frameCount = '3'
+  state.channels[0].detection_ready = true
+  state.channels[0].tracking = {state:'tracking',source_session:runId,frame_id:11,age_seconds:0,
+    processing_fps:8.5,observed_fps:4.8,device:'cpu',message:'YOLO + ByteTrack berjalan.',
+    tracks:[{track_id:1,class_name:'car',confidence:.8,bbox:[.1,.1,.4,.4]}]}
+  render(panel('sigap')); await flush()
+  expect(screen.getByText(/ByteTrack · 3 kendaraan/)).toBeTruthy()
+  expect(screen.queryByText(/ByteTrack · 1 kendaraan/)).toBeNull()
+  frameCount = '0'; await flush(200)
+  expect(screen.getByText(/ByteTrack · 0 kendaraan/)).toBeTruthy()
+  frameCount = null; await flush(200)
+  expect(screen.getByText('YOLO26s + ByteTrack', {exact:true})).toBeTruthy()
+  expect(screen.queryByText(/ByteTrack · \d+ kendaraan/)).toBeNull()
+  frameSession = secondRunId; await flush(200)
+  expect(screen.queryByAltText('Video pendekat Utara')).toBeNull()
+  expect(screen.queryByText('YOLO26s + ByteTrack', {exact:true})).toBeNull()
 })
 
 it('discards a frame from an old source and clears stale video', async () => {

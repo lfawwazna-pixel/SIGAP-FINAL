@@ -63,11 +63,14 @@ describe('isolated simulator UI', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Mulai' }))
     await flush()
     expect(screen.getByRole('button', { name: 'Jeda' })).toBeTruthy()
-    const previous = atcsSequence
+    const previous = statusSequence
+    const previousTraffic = atcsSequence
     await flush(550)
-    expect(atcsSequence).toBeGreaterThan(previous)
+    expect(statusSequence).toBeGreaterThan(previous)
+    expect(atcsSequence).toBe(previousTraffic)
     fireEvent.click(within(screen.getByRole('group', { name: 'Mode ruang kerja' })).getByRole('button', { name: /ATCS Fase bersama/ }))
     await flush()
+    expect(atcsSequence).toBeGreaterThan(previousTraffic)
     expect(screen.queryByRole('button', { name: 'Jeda' })).toBeNull()
     expect(postBodies.map(x => x.action)).toEqual(['start'])
   })

@@ -53,12 +53,17 @@ def test_overlay_uses_its_own_frame_and_falls_back_when_stale(video_context):
     assert tracked.content == channel.tracked_frame and tracked.headers['x-tracking'] == 'ByteTrack'
     assert tracked.headers['x-frame-id'] == '19' and tracked.headers['x-media-seconds'] == '3.8'
     assert tracked.headers['x-source-session'] == raw.headers['x-source-session']
+    assert raw.headers['x-track-count'] == tracked.headers['x-track-count'] == '1'
+    channel.tracks = []
+    assert client.get('/api/video/U/frame?overlay=true').headers['x-track-count'] == '0'
     channel.tracked_at -= 4
     assert client.get('/api/video/U/frame?overlay=true').content == channel.frame
+    assert client.get('/api/video/U/frame?overlay=true').headers['x-track-count'] == ''
     assert channel.view().detection_ready is False and channel.view().tracking.tracks == []
     channel.tracked_at = time.monotonic()
     channel.session = uuid4()
     assert client.get('/api/video/U/frame?overlay=true').headers['x-tracking'] == 'none'
+    assert client.get('/api/video/U/frame?overlay=true').headers['x-track-count'] == ''
 
 
 def test_result_finishing_after_source_change_is_discarded(tmp_path):

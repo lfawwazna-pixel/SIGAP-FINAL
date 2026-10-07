@@ -1,5 +1,6 @@
 """Local JSON-lines worker: one model, separate ByteTrack state per camera/session."""
 import base64
+from collections import Counter
 from contextlib import redirect_stdout
 import json
 import os
@@ -24,6 +25,9 @@ def main():
         from ultralytics.utils import LOGGER
         LOGGER.setLevel('ERROR')
         torch.set_num_threads(2)
+        # Four FFmpeg decoders share the CPU with tracking and the web services.
+        # Small JPEG frames do not benefit from OpenCV's own large thread pool.
+        cv2.setNumThreads(1)
         path = Path(sys.argv[1]).resolve()
         if not path.is_file():
             raise FileNotFoundError('Configured model is missing')
@@ -33,6 +37,8 @@ def main():
             raise ValueError('Expected the six-class SIGAP model')
         device = '0' if torch.cuda.is_available() else 'cpu'
         trackers = {}
+        diagnostics = os.environ.get('SIGAP_VISION_DIAGNOSTICS') == '1'
+        window_started, window, completed = time.perf_counter(), [], 0
         print('YOLO26s + ByteTrack ready on ' + device, file=sys.stderr, flush=True)
     for line in sys.stdin:
         request = json.loads(line)
@@ -41,6 +47,7 @@ def main():
             frame = cv2.imdecode(np.frombuffer(base64.b64decode(request['jpeg']), dtype=np.uint8), cv2.IMREAD_COLOR)
             if frame is None:
                 raise ValueError('Invalid JPEG')
+            decoded_at = time.perf_counter()
             key = (request['direction'], request['session'])
             if key not in trackers:
                 # Remove the old session of this camera without disturbing other cameras.
@@ -59,9 +66,12 @@ def main():
                 # Expire lost tracks according to source time, including skipped frames.
                 tracker.frame_id += gap - 1
             BaseTrack._count = state['counter']
+            predict_started = time.perf_counter()
             with redirect_stdout(sys.stderr):
                 result = model.predict(frame, imgsz=640, conf=.1, device=device, verbose=False)[0]
+                predicted_at = time.perf_counter()
                 rows = tracker.update(result.boxes.cpu().numpy(), frame)
+            tracked_at = time.perf_counter()
             state['counter'], state['last_frame'] = BaseTrack._count, request['frame_id']
             height, width = frame.shape[:2]
             objects = []
@@ -86,6 +96,30 @@ def main():
             response = dict(direction=request['direction'], session=request['session'], frame_id=request['frame_id'],
                 jpeg=base64.b64encode(encoded).decode('ascii'), tracks=objects,
                 processing_ms=(time.perf_counter() - started) * 1000, device=device)
+            if diagnostics:
+                timings = dict(decode=(decoded_at-started)*1000,
+                    predict=(predicted_at-predict_started)*1000,
+                    track=(tracked_at-predicted_at)*1000,
+                    draw_encode=(time.perf_counter()-tracked_at)*1000)
+                response['timings_ms'] = timings
+                completed += 1
+                # Exclude cold startup, then aggregate to stderr; stdout remains JSON transport.
+                if completed <= 4:
+                    window_started = time.perf_counter()
+                else:
+                    window.append((request['direction'], response['processing_ms'], timings))
+                    elapsed = time.perf_counter()-window_started
+                    if elapsed >= 10:
+                        counts = Counter(row[0] for row in window)
+                        total = sorted(row[1] for row in window)
+                        profile = dict(samples=len(window), seconds=round(elapsed,2),
+                            camera_fps={d:round(counts[d]/elapsed,2) for d in 'UTSB'},
+                            processing_mean_ms=round(sum(total)/len(total),2),
+                            processing_p95_ms=round(total[int((len(total)-1)*.95)],2),
+                            stage_mean_ms={k:round(sum(row[2][k] for row in window)/len(window),2) for k in timings},
+                            device=device, opencv_threads=cv2.getNumThreads(), torch_threads=torch.get_num_threads())
+                        print('[vision-performance] '+json.dumps(profile,separators=(',',':')),file=sys.stderr,flush=True)
+                        window_started, window = time.perf_counter(), []
         except Exception as exc:
             print(type(exc).__name__, file=sys.stderr, flush=True)
             response = dict(error=type(exc).__name__)

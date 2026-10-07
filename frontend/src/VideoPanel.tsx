@@ -25,6 +25,7 @@ export function VideoPanel({ workspace, csrf, mayControl }: { workspace: 'atcs'|
   const [frameKey, setFrameKey] = useState('')
   const [frameSeconds, setFrameSeconds] = useState('')
   const [trackedFrame, setTrackedFrame] = useState(false)
+  const [frameTrackCount, setFrameTrackCount] = useState<number | null>(null)
   const [pending, setPending] = useState(false)
   const [message, setMessage] = useState('')
   const [editing, setEditing] = useState(false)
@@ -46,7 +47,7 @@ export function VideoPanel({ workspace, csrf, mayControl }: { workspace: 'atcs'|
     let epoch = 0
     let timer: ReturnType<typeof setTimeout>
     let abort: AbortController | null = null
-    const clear = () => { if (currentUrl.current) URL.revokeObjectURL(currentUrl.current); currentUrl.current = ''; setUrl(''); setFrameKey(''); setFrameSeconds(''); setTrackedFrame(false) }
+    const clear = () => { if (currentUrl.current) URL.revokeObjectURL(currentUrl.current); currentUrl.current = ''; setUrl(''); setFrameKey(''); setFrameSeconds(''); setTrackedFrame(false); setFrameTrackCount(null) }
     clear()
     if (!session || !frameVisible) return
     async function frame() {
@@ -67,6 +68,8 @@ export function VideoPanel({ workspace, csrf, mayControl }: { workspace: 'atcs'|
           if (currentUrl.current) URL.revokeObjectURL(currentUrl.current)
           currentUrl.current = next; setUrl(next); setFrameKey(r.headers.get('X-Frame-Id') || '')
           setFrameSeconds(r.headers.get('X-Media-Seconds') || ''); setTrackedFrame(r.headers.get('X-Tracking') === 'ByteTrack')
+          const count = r.headers.get('X-Track-Count')
+          setFrameTrackCount(count !== null && /^\d+$/.test(count) ? Number(count) : null)
         }
       } catch { if (!disposed && attempt === epoch) clear() }
       finally { clearTimeout(timeout); if (!disposed && attempt === epoch && !document.hidden) timer = setTimeout(() => void frame(), 200) }
@@ -107,7 +110,7 @@ export function VideoPanel({ workspace, csrf, mayControl }: { workspace: 'atcs'|
         }}>{(Object.keys(draw) as Target[]).map(k => <g key={k}>{k === 'stop_line' ? <polyline points={draw[k].map(p => `${p.x*1000},${p.y*1000}`).join(' ')} fill="none" stroke={colors[k]} strokeWidth="4" /> : <polygon points={draw[k].map(p => `${p.x*1000},${p.y*1000}`).join(' ')} fill={colors[k]} fillOpacity=".13" stroke={colors[k]} strokeWidth="3" />}{draw[k].map((p,i) => <circle key={i} cx={p.x*1000} cy={p.y*1000} r="5" fill={colors[k]} />)}</g>)}</svg></> : <div className="video-empty"><strong>{channel ? stateNames[channel.state] : 'Memeriksa sumber video'}</strong><p>{feed.error || channel?.message || 'Belum menerima status sumber.'}</p></div>}
       </div>
       <div className="video-caption"><span>{channel?.label || 'Belum ada video'} · {channel ? stateNames[channel.state] : 'Belum tersedia'}</span><span>{channel?.source === 'recording' ? `${frameSeconds ? Number(frameSeconds).toFixed(1) : '—'} dtk · ` : ''}Frame {frameKey || '—'}</span></div>
-      {workspace === 'sigap' && <div className="video-detection-note" role="status"><strong>{trackedFrame && channel?.detection_ready ? `YOLO26s + ByteTrack · ${channel.tracking?.tracks.length ?? 0} kendaraan` : channel?.tracking?.state === 'disabled' || !channel?.tracking ? 'YOLO belum diaktifkan' : 'Video asli · tracking belum tersedia'}</strong><p>{channel?.tracking?.message || 'Video tampil tanpa deteksi.'}</p>{channel?.detection_ready && <p>Tracking kamera: {channel.tracking?.observed_fps?.toFixed(1) ?? '—'} FPS · Pemrosesan: {channel.tracking?.processing_fps?.toFixed(1) ?? '—'} FPS · {channel.tracking?.device === 'cpu' ? 'CPU' : 'GPU'}</p>}<p>Pratinjau maksimal 5 FPS. Kalibrasi empat pendekat diperlukan sebelum kendali SIGAP diaktifkan.</p></div>}
+      {workspace === 'sigap' && <div className="video-detection-note" role="status"><strong>{trackedFrame ? `YOLO26s + ByteTrack${frameTrackCount === null ? '' : ` · ${frameTrackCount} kendaraan`}` : channel?.tracking?.state === 'disabled' || !channel?.tracking ? 'YOLO belum diaktifkan' : 'Video asli · tracking belum tersedia'}</strong><p>{channel?.tracking?.message || 'Video tampil tanpa deteksi.'}</p>{channel?.detection_ready && <p>Tracking kamera: {channel.tracking?.observed_fps?.toFixed(1) ?? '—'} FPS · Pemrosesan: {channel.tracking?.processing_fps?.toFixed(1) ?? '—'} FPS · {channel.tracking?.device === 'cpu' ? 'CPU' : 'GPU'}</p>}<p>Pratinjau maksimal 5 FPS. Kalibrasi empat pendekat diperlukan sebelum kendali SIGAP diaktifkan.</p></div>}
     </div><div className="video-settings">
       <h3>Atur sumber {directionNames[direction]}</h3>
       <label>Unggah rekaman MP4<input aria-label="Unggah rekaman MP4" type="file" accept="video/mp4,.mp4" disabled={!channel || pending || !mayControl} onChange={e => { void upload(e.target.files?.[0]); e.target.value = '' }} /></label>

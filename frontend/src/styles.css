@@ -145,6 +145,12 @@ th, td { padding: 13px 22px; border-top: 1px solid #e0e7ed; }
 th { font-weight: 500; }
 thead th { padding-top: 10px; padding-bottom: 10px; white-space: nowrap; }
 .event-table { min-width: 660px; }
+.video-map-table { min-width: 0; table-layout: fixed; font-variant-numeric: tabular-nums; }
+.video-map-table th, .video-map-table td { padding: 12px 10px; overflow-wrap: anywhere; }
+.video-map-table thead th { white-space: normal; }
+.event-table.video-map-table td:first-child, .event-table.video-map-table td:nth-child(3) { width: auto; white-space: normal; }
+.map-count rect { fill: #fff; stroke: #a8bac8; stroke-width: 1.5; }
+.map-count text { fill: #284a64; font-family: 'IBM Plex Mono', monospace; font-size: 19px; }
 .event-table td:first-child { width: 130px; font-family: 'IBM Plex Mono', monospace; font-size: 11px; }
 .event-table th[scope='row'] { width: 170px; }
 .event-table td:nth-child(3) { width: 145px; white-space: nowrap; }

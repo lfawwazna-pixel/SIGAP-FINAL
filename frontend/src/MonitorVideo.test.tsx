@@ -55,6 +55,14 @@ it.each([false, true])('shows identical camera counts in both workspaces after t
   const counts = screen.getByRole('table', {name:'Jumlah kendaraan video dan peta'})
   expect(within(counts).getAllByRole('row').slice(1).map(row => within(row).getAllByRole('cell')[0].textContent)).toEqual(['0','1','0','0'])
   expect(screen.getByText(/SIGAP mengambil alih kendali/)).toBeTruthy()
+  const trafficRequests = () => vi.mocked(fetch).mock.calls.filter(([url]) => String(url).endsWith('/atcs/traffic')).length
+  const statusRequests = () => vi.mocked(fetch).mock.calls.filter(([url]) => String(url).endsWith('/atcs/status')).length
+  const beforeTraffic = trafficRequests()
+  const beforeStatus = statusRequests()
+  await act(async () => { await vi.advanceTimersByTimeAsync(500) })
+  expect(trafficRequests()).toBe(beforeTraffic)
+  expect(statusRequests()).toBeGreaterThan(beforeStatus)
+  expect(view.container.querySelectorAll('.map-vehicle')).toHaveLength(1)
   const switcher = screen.getByRole('group',{name:'Mode ruang kerja'})
   fireEvent.click(within(switcher).getByRole('button',{name:/SIGAP Adaptif/}))
   await act(async () => { await vi.advanceTimersByTimeAsync(0) })
@@ -64,6 +72,10 @@ it.each([false, true])('shows identical camera counts in both workspaces after t
   await act(async () => { await vi.advanceTimersByTimeAsync(1000) })
   expect(view.container.querySelector('[data-vehicle-id="11"]')).toBeNull()
   expect(screen.getByText(/ATCS mengendalikan · waktu tetap/)).toBeTruthy()
+  fireEvent.click(within(switcher).getByRole('button',{name:/ATCS Fase bersama/}))
+  await act(async () => { await vi.advanceTimersByTimeAsync(500) })
+  expect(trafficRequests()).toBeGreaterThan(beforeTraffic)
+  expect(screen.getByTestId('countdown').textContent).toBe('99')
 })
 
 it('shows all tracked vehicles upon selecting SIGAP before controller activation, without valid calibration', async () => {

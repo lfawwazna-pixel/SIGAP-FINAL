@@ -3,13 +3,17 @@ from collections import deque
 from datetime import datetime, timedelta, timezone
 from hashlib import sha256
 from math import hypot
+import json
 import time
 from uuid import uuid4
 
 from contracts.adaptive import MeasurementBatch
+from contracts.configuration import PROJECT_ROOT
 from contracts.vehicles import VehicleView
 
 EPOCH = datetime(1970, 1, 1, tzinfo=timezone.utc)
+MAP_GEOMETRY = json.loads((PROJECT_ROOT / 'configs/map-geometry.json').read_text(encoding='utf-8'))
+MAP_BODY_LENGTH, MAP_CLEARANCE, MAP_PITCH = 26, 6, 36
 
 
 def inside(x, y, polygon):
@@ -28,23 +32,24 @@ def line_side(x, y, line):
 def map_poses(direction, generation, entries):
     """Keep every track visible on its camera's approach, including outside the ROI.
 
-    Coordinates are schematic. Pack crowded lanes instead of drawing multiple
-    vehicles on top of one another; this never changes measured control demand.
+    Slots represent presence, not camera pixel coordinates or simulated motion.
+    Keep IDs in a stable order; noisy boxes must not make vehicles overtake each
+    other. The renderer scales crowded lanes to their actual slot spacing.
     """
     vehicles = []
     for lane in ('outer', 'middle', 'inner'):
         ordered = sorted((e for e in entries if e['lane'] == lane),
-                         key=lambda e: (e['distance'], e['track'].track_id))
-        # The outer lane ends before the island/slip-road fork.
-        near, far = (155 if lane == 'outer' else 0), 625
-        gap = min(30, (far-near)/max(1, len(ordered)-1))
-        previous = near-gap
+                         key=lambda e: e['track'].track_id)
+        # Leave the complete body inside the road, behind the stop line/fork.
+        clearance = MAP_BODY_LENGTH/2 + MAP_CLEARANCE
+        front = (MAP_GEOMETRY['slip']['start'][1] if lane == 'outer'
+                 else MAP_GEOMETRY['stop_line']) - clearance
+        back = MAP_GEOMETRY['start'] + clearance
+        gap = min(MAP_PITCH, (front-back)/max(1, len(ordered)-1))
         for i, entry in enumerate(ordered):
-            distance = max(previous+gap, min(max(near, entry['distance']), far-gap*(len(ordered)-i-1)))
-            previous = distance
-            px, py = dict(outer=510, middle=470, inner=430)[lane], 240-distance
+            px, py = MAP_GEOMETRY['lane_centers'][lane], front-i*gap
             for _ in range('UTSB'.index(direction)):
-                px, py = 800-py, px
+                px, py = 2*MAP_GEOMETRY['center']-py, px
             track = entry['track']
             identity = int.from_bytes(sha256(f'{direction}:{generation}:{track.track_id}'.encode()).digest()[:6], 'big') or 1
             heading = (90+'UTSB'.index(direction)*90+180) % 360-180
@@ -52,7 +57,7 @@ def map_poses(direction, generation, entries):
                 movement=dict(outer='left', middle='straight', inner='right')[lane],
                 kind={'ambulance':'ambulance', 'fire_truck':'fire_engine'}.get(track.class_name, 'car'),
                 x=px, y=py, heading=heading, stopped=entry['stopped'], served=entry['passed'],
-                distance_to_stop=distance, lane=lane, target_lane=lane, changing_to=None,
+                distance_to_stop=max(0, entry['distance']), lane=lane, target_lane=lane, changing_to=None,
                 stop_reason='stationary' if entry['stopped'] else None))
     return vehicles
 
@@ -147,6 +152,19 @@ class VideoMeasurements:
                         extent = max(abs(line_side(p.x, p.y, calibration.stop_line)) for p in polygon)
                         distance = min(1, abs(side)/max(extent, .0001))*625
                 history = histories.setdefault(track.track_id, dict(points=deque(), waiting=None, last=now))
+                # Display hysteresis is deliberately separate from calibrated
+                # demand: a box grazing a lane boundary must not flicker across
+                # the map, but the control counts still use this exact sample.
+                if 'display_lane' not in history:
+                    history.update(display_lane=lane, lane_candidate=lane, lane_votes=0)
+                if fresh_sample:
+                    if lane == history['display_lane']:
+                        history.update(lane_candidate=lane, lane_votes=0)
+                    else:
+                        history['lane_votes'] = history['lane_votes']+1 if history['lane_candidate'] == lane else 1
+                        history['lane_candidate'] = lane
+                        if history['lane_votes'] >= 3:
+                            history.update(display_lane=lane, lane_votes=0)
                 if fresh_sample:
                     captured = channel.tracked_at
                     points = history['points']
@@ -158,7 +176,7 @@ class VideoMeasurements:
                     history['waiting'] = (history['waiting'] if history['waiting'] is not None else points[0][0]) if stable else None
                     history['last'] = captured
                 stopped = history['waiting'] is not None
-                entries.append(dict(track=track, lane=lane, distance=distance, stopped=stopped, passed=passed))
+                entries.append(dict(track=track, lane=history['display_lane'], distance=distance, stopped=stopped, passed=passed))
                 if not measured:
                     continue
                 if lane == 'outer':

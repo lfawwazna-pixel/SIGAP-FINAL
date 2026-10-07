@@ -252,3 +252,31 @@ def test_video_sender_requires_activation_falls_back_recovers_and_manual_release
             assert rig.control.state == 'fixed_time' and not sender.auto_resume
             assert actions.count('activate') == 1
     asyncio.run(scenario())
+
+
+def test_lane_display_filters_jitter_without_delaying_control_counts(clock, monkeypatch, tmp_path):
+    hub = fresh_video_hub(clock, monkeypatch, tmp_path)
+    channel = hub.channels['U']
+    provider = VideoMeasurements('test')
+    def capture(x):
+        clock.advance(.2)
+        channel.tracks = [TrackedVehicle(track_id=10, class_name='car', confidence=.9,
+            bbox=[x-.02, .2, x+.02, .4])]
+        channel.received = channel.tracked_at = clock.monotonic()
+        channel.tracked_id += 1
+        return provider.snapshot(hub)
+    capture(.45)
+    identity = provider.vehicles[0].id
+    assert provider.vehicles[0].lane == 'middle'
+    changed = capture(.15)
+    assert changed.approaches['U'].controlled_count == 0 and changed.approaches['U'].slip_count == 1
+    assert provider.vehicles[0].lane == 'middle'
+    for _ in range(5):
+        provider.snapshot(hub)  # Polling one frame must not create extra votes.
+    assert provider.vehicles[0].lane == 'middle'
+    capture(.45)  # A one-frame boundary jitter is cancelled.
+    for _ in range(2):
+        capture(.15)
+        assert provider.vehicles[0].lane == 'middle'
+    capture(.15)
+    assert provider.vehicles[0].lane == 'outer' and provider.vehicles[0].id == identity

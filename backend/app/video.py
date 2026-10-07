@@ -120,7 +120,8 @@ class VideoChannel:
             while True:
                 if self.frame is None:
                     self.state, self.message = 'connecting', 'Menghubungkan decoder video.'
-                args = [get_ffmpeg_exe(), '-hide_banner', '-loglevel', 'error', '-nostdin', '-threads', '1']
+                args = [get_ffmpeg_exe(), '-hide_banner', '-loglevel', 'error', '-nostdin',
+                        '-threads', '1', '-filter_threads', '1']
                 if self.source == 'recording':
                     args += ['-re', '-ss', str(offset), '-protocol_whitelist', 'file,pipe', '-i', str(self.path)]
                 else:
@@ -255,6 +256,7 @@ async def frame(direction: Direction, request: Request, overlay: bool = False):
     return Response(jpeg, media_type='image/jpeg', headers={
         'X-Source-Session': str(channel.session), 'X-Frame-Id': str(channel.tracked_id if matched else channel.frame_id),
         'X-Media-Seconds': str(channel.tracked_position if matched else channel.position),
+        'X-Track-Count': str(len(channel.tracks)) if matched else '',
         'X-Tracking': 'ByteTrack' if detected else 'none', 'Cache-Control': 'private, no-store'})
 
 @router.post('/{direction}/upload', response_model=VideoChannelView, dependencies=[Depends(require_mutation)])

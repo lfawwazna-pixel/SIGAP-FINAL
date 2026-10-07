@@ -36,20 +36,24 @@ export function Monitor({ session, onLogout, signingOut, logoutError }: {
   const verified = monitor.connection === 'live' && data && config && coherentStatus(data, config.intersection_id) ? data : null
   const connection = config ? monitor.connection : snapshot.configuration.state === 'loading' ? 'loading' : 'unavailable'
   const approach = config?.approaches.find(a => a.code === selected)
-  const traffic = useTraffic('atcs_synthetic', config?.intersection_id, true, session.csrf_token)
   const mayControl = session.operator.permissions.includes('control:operate')
   const adaptive = useAdaptive(Boolean(config))
   const control = useControl(config?.intersection_id, session.csrf_token, mayControl, adaptive.data?.enabled === true)
-  const trafficFrame = verified && traffic.data?.run_id === verified.run_id ? traffic.data : null
-  // Lamps and vehicles share one server snapshot whenever the traffic feed is available.
   const videoControl = verified?.controller === 'SIGAP' && (control.status?.source === 'cctv'
     || adaptive.data?.source === 'recording' || adaptive.data?.source === 'cctv')
+  const videoData = adaptive.data?.enabled && adaptive.data.source !== 'synthetic' ? adaptive.data : null
+  const videoMap = videoControl || (workspace === 'sigap' && adaptive.data?.source !== 'synthetic')
+  // Fetch synthetic poses only while they are actually displayed. The independent
+  // ATCS status feed keeps checking the real controller in every workspace.
+  const needsTraffic = workspace !== 'simulation' && !videoMap
+    && (workspace === 'atcs' || control.status?.source === 'integration_test')
+  const traffic = useTraffic('atcs_synthetic', config?.intersection_id, needsTraffic, session.csrf_token)
+  const trafficFrame = verified && traffic.data?.run_id === verified.run_id ? traffic.data : null
+  // Lamps and vehicles share one server snapshot whenever the traffic feed is available.
   const live = verified && trafficFrame && verified.controller === 'ATCS' ? { ...verified, signals: trafficFrame.signals, phase: trafficFrame.phase,
     active_approach: trafficFrame.active_approach, remaining_seconds: trafficFrame.remaining_seconds,
     conflict_area: { ...verified.conflict_area!, state: trafficFrame.conflict } } : verified
   const signals = live?.signals ?? null
-  const videoData = adaptive.data?.enabled && adaptive.data.source !== 'synthetic' ? adaptive.data : null
-  const videoMap = videoControl || (workspace === 'sigap' && adaptive.data?.source !== 'synthetic')
   const vehicles = videoMap ? videoMapVehicles(videoData, config?.intersection_id)
     : (workspace === 'atcs' || control.status?.source === 'integration_test') && live && traffic.data?.run_id === live.run_id ? traffic.data.vehicles : []
   const selectedSignal = signals?.[selected] ?? 'unknown'
@@ -91,7 +95,7 @@ export function Monitor({ session, onLogout, signingOut, logoutError }: {
       <VideoPanel workspace={workspace} csrf={session.csrf_token} mayControl={mayControl} />
       <SimulationWorkspace intersection={config?.intersection_id} csrf={session.csrf_token} active={workspace === 'simulation'} />
       <div hidden={workspace === 'simulation'}>
-      <div className="simulation-strip"><span className="simulation-mark" aria-hidden="true">{videoMap ? 'V' : 'A'}</span><span><strong>{live?.mode ? `${live.controller} · ${modeNames[live.mode]}` : 'Pengendali ATCS'}</strong> · {videoMap ? 'Satu ikon per kendaraan terlacak, sesuai pendekat kamera. Posisi peta skematis; kalibrasi memperbaiki penempatan lajur.' : 'Kendaraan ilustrasi sintetis.'} Belum terhubung ke lampu lapangan.</span><span className="read-only">1× · Terus berjalan</span></div>
+      <div className="simulation-strip"><span className="simulation-mark" aria-hidden="true">{videoMap ? 'V' : 'A'}</span><span><strong>{live?.mode ? `${live.controller} · ${modeNames[live.mode]}` : 'Pengendali ATCS'}</strong> · {videoMap ? 'Satu ikon per kendaraan terlacak, sesuai pendekat kamera. Ikon disusun per lajur; posisi dan geraknya tidak sama persis dengan video.' : 'Kendaraan ilustrasi sintetis.'} Belum terhubung ke lampu lapangan.</span><span className="read-only">{videoMap ? 'Tracking aktif' : '1× · Terus berjalan'}</span></div>
       {connection !== 'live' && <div className={`connection-note${connection === 'loading' ? ' is-loading' : ''}`}>
         <strong>{connectionLabels[connection]}.</strong> {connection === 'loading' ? 'Menunggu kondisi pengendali.'
           : connection === 'paused' ? 'Data lampu akan diperiksa kembali saat halaman aktif.'
@@ -103,12 +107,12 @@ export function Monitor({ session, onLogout, signingOut, logoutError }: {
           <div className="section-toolbar"><div><h2 id="map-title">Situasi simpang</h2><p>Pilih pendekat untuk memeriksa arah pergerakan.</p></div>
             <div className="map-tools"><MapZoom label="Zoom peta ATCS" value={zoom} onChange={setZoom} /><button className="route-toggle" aria-pressed={routes} onClick={() => setRoutes(value => !value)}><span aria-hidden="true">{routes ? '✓' : '+'}</span> Rute terpilih</button></div></div>
           <div className="map-canvas traffic-map-scroll">
-            {config ? <div style={{ width: `${zoom*100}%` }}><IntersectionMap selected={selected} onSelect={setSelected} signals={signals} routes={routes} vehicles={vehicles} vehicleRunId={live?.run_id ?? undefined} /></div>
+            {config ? <div style={{ width: `${zoom*100}%` }}><IntersectionMap selected={selected} onSelect={setSelected} signals={signals} routes={routes} vehicles={vehicles} vehicleRunId={live?.run_id ?? undefined} schematic={videoMap} /></div>
               : <div className="map-empty"><span aria-hidden="true">＋</span><h3>{snapshot.configuration.state === 'loading' ? 'Menyiapkan peta simpang' : 'Peta belum dapat ditampilkan'}</h3><p>Geometri dan arah dibaca dari konfigurasi simpang.</p></div>}
           </div>
           <div className="map-legend"><span><i className="legend-route" />Ruas pintas kiri</span><span><i className="legend-dashed" />Rute pendekat terpilih</span><span><i className="legend-yield" />Beri jalan saat bergabung</span></div>
           <p className="map-rule">Ruas pintas kiri melewati sisi luar pulau jalan. <strong>Arus lurus dan kanan tetap mengikuti lampu.</strong></p>
-          {videoMap ? <><p className="map-rule" role="status">{vehicles.length} kendaraan terlacak ditampilkan di peta. Jumlah per pendekat mengikuti pengamatan tracking terbaru; kebutuhan lampu hanya menghitung area terkalibrasi.</p>{videoData?.measurements ? <div className="table-scroll"><table className="event-table" aria-label="Jumlah kendaraan video dan peta"><thead><tr><th>Pendekat</th><th>Terlacak / di peta</th><th>Untuk lampu</th><th>Antrean</th><th>Tunggu terlama</th></tr></thead><tbody>{directions.map(d => { const v = videoData.measurements!.approaches[d]; const usable = v.usable && freshVideoObservation(v.observed_at); return <tr key={d}><th>{directionNames[d]}</th><td>{vehicles.filter(vehicle => vehicle.origin === d).length}</td><td>{usable ? v.controlled_count : '—'}</td><td>{usable ? v.queue_count : '—'}</td><td>{usable ? `${v.oldest_wait_seconds.toFixed(1)} dtk` : '—'}</td></tr> })}</tbody></table></div> : <p className="map-rule">Menunggu hasil tracking mutakhir. Video dan kalibrasi dapat diperiksa di panel CCTV.</p>}</> : live && traffic.data?.run_id === live.run_id ? <TrafficMetrics data={traffic.data} /> : <p className="map-rule">Posisi kendaraan belum tersedia atau tidak mutakhir.</p>}
+          {videoMap ? <><p className="map-rule" role="status">{vehicles.length} kendaraan terlacak ditampilkan di peta. Jumlah per pendekat mengikuti tracking terbaru. Ikon diperkecil jika lajur padat; gunakan zoom untuk memeriksa. Kebutuhan lampu hanya menghitung area terkalibrasi.</p>{videoData?.measurements ? <div className="table-scroll"><table className="event-table video-map-table" aria-label="Jumlah kendaraan video dan peta"><thead><tr><th>Pendekat</th><th>Terlacak / di peta</th><th>Untuk lampu</th><th>Antrean</th><th>Tunggu terlama</th></tr></thead><tbody>{directions.map(d => { const v = videoData.measurements!.approaches[d]; const usable = v.usable && freshVideoObservation(v.observed_at); return <tr key={d}><th>{directionNames[d]}</th><td>{vehicles.filter(vehicle => vehicle.origin === d).length}</td><td>{usable ? v.controlled_count : '—'}</td><td>{usable ? v.queue_count : '—'}</td><td>{usable ? `${v.oldest_wait_seconds.toFixed(1)} dtk` : '—'}</td></tr> })}</tbody></table></div> : <p className="map-rule">Menunggu hasil tracking mutakhir. Video dan kalibrasi dapat diperiksa di panel CCTV.</p>}</> : live && traffic.data?.run_id === live.run_id ? <TrafficMetrics data={traffic.data} /> : <p className="map-rule">Posisi kendaraan belum tersedia atau tidak mutakhir.</p>}
         </section>
         <aside className="operations-panel" aria-label="Panel operasional">
           <div className="controller-heading"><span className="eyebrow">PENGENDALI AKTIF</span><div><strong>{live?.controller ?? '—'}</strong><span>{live?.mode ? modeNames[live.mode] : 'Belum terverifikasi'}</span></div></div>
