@@ -1,5 +1,6 @@
 import asyncio
 import time
+import sys
 from types import SimpleNamespace
 from uuid import uuid4
 
@@ -9,6 +10,27 @@ from backend.app.vision import VisionWorker
 from contracts.video import TrackedVehicle
 from test_auth import auth_context, login  # noqa: F401
 from test_video import video_context  # noqa: F401
+
+
+def test_worker_shutdown_reaps_real_child_and_closes_its_pipes(tmp_path):
+    async def scenario():
+        worker = VisionWorker(Settings(_env_file=None, sigap_yolo_model=str(tmp_path/'unused.pt')))
+        process = await asyncio.create_subprocess_exec(sys.executable, '-u', '-c',
+            'import sys; print("ready", flush=True); sys.stdin.buffer.read()',
+            stdin=asyncio.subprocess.PIPE, stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.DEVNULL)
+        worker.process = process
+        try:
+            assert (await asyncio.wait_for(process.stdout.readline(), 10)).rstrip(b'\r\n') == b'ready'
+            await asyncio.wait_for(worker.close(), 10)
+            assert process.returncode is not None and worker.process is None
+            assert process.stdin.is_closing() and process.stdout.at_eof()
+            await worker.close()  # Repeated shutdown stays harmless.
+        finally:
+            if process.returncode is None:
+                process.kill()
+                await process.communicate()
+    asyncio.run(scenario())
 
 
 def test_overlay_uses_its_own_frame_and_falls_back_when_stale(video_context):

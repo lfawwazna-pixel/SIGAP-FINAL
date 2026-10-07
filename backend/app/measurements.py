@@ -1,4 +1,4 @@
-"""Image-space queue estimates. Never infer demand from uncalibrated/stale video."""
+"""Calibrated demand plus one schematic map pose per fresh tracked vehicle."""
 from collections import deque
 from datetime import datetime, timedelta, timezone
 from hashlib import sha256
@@ -23,6 +23,38 @@ def inside(x, y, polygon):
 def line_side(x, y, line):
     a, b = line
     return (b.x-a.x)*(y-a.y)-(b.y-a.y)*(x-a.x)
+
+
+def map_poses(direction, generation, entries):
+    """Keep every track visible on its camera's approach, including outside the ROI.
+
+    Coordinates are schematic. Pack crowded lanes instead of drawing multiple
+    vehicles on top of one another; this never changes measured control demand.
+    """
+    vehicles = []
+    for lane in ('outer', 'middle', 'inner'):
+        ordered = sorted((e for e in entries if e['lane'] == lane),
+                         key=lambda e: (e['distance'], e['track'].track_id))
+        # The outer lane ends before the island/slip-road fork.
+        near, far = (155 if lane == 'outer' else 0), 625
+        gap = min(30, (far-near)/max(1, len(ordered)-1))
+        previous = near-gap
+        for i, entry in enumerate(ordered):
+            distance = max(previous+gap, min(max(near, entry['distance']), far-gap*(len(ordered)-i-1)))
+            previous = distance
+            px, py = dict(outer=510, middle=470, inner=430)[lane], 240-distance
+            for _ in range('UTSB'.index(direction)):
+                px, py = 800-py, px
+            track = entry['track']
+            identity = int.from_bytes(sha256(f'{direction}:{generation}:{track.track_id}'.encode()).digest()[:6], 'big') or 1
+            heading = (90+'UTSB'.index(direction)*90+180) % 360-180
+            vehicles.append(VehicleView(id=identity, origin=direction,
+                movement=dict(outer='left', middle='straight', inner='right')[lane],
+                kind={'ambulance':'ambulance', 'fire_truck':'fire_engine'}.get(track.class_name, 'car'),
+                x=px, y=py, heading=heading, stopped=entry['stopped'], served=entry['passed'],
+                distance_to_stop=distance, lane=lane, target_lane=lane, changing_to=None,
+                stop_reason='stationary' if entry['stopped'] else None))
+    return vehicles
 
 
 class VideoMeasurements:
@@ -69,38 +101,51 @@ class VideoMeasurements:
                         and previous[0] == channel.session and previous[1] != channel.tracker_session
                         and previous[2] == channel.calibration and (at-previous[3]['observed_at']).total_seconds() <= 3):
                     approaches[direction] = previous[3].copy()
+                    vehicles.extend(previous[4])
+                    if previous[5]:
+                        issues[direction] = previous[5]
                     continue
                 issues[direction] = 'Video atau tracking belum mutakhir.'
                 continue
-            if not channel.calibration:
-                issues[direction] = 'Tandai tiga lajur dan garis henti dahulu.'
-                continue
             calibration = channel.calibration
-            generation = (channel.tracker_session, calibration.model_dump_json())
+            if not calibration:
+                issues[direction] = 'Tandai tiga lajur dan garis henti dahulu. Kendaraan tetap ditampilkan secara skematis.'
+            generation = (channel.tracker_session, calibration.model_dump_json() if calibration else '')
             if self.samples.get(direction, (None,))[0] != generation:
                 self.history[direction] = {}
                 self.samples[direction] = (generation, None)
             histories = self.history[direction]
             fresh_sample = self.samples[direction][1] != channel.tracked_id
-            ambiguous = False
+            ambiguous, entries = False, []
             for track in channel.tracks:
                 x1, _, x2, y = track.bbox
                 x = (x1+x2)/2
-                lanes = [lane for lane, polygon in calibration.lanes.items() if inside(x, y, polygon)]
+                lanes = [lane for lane, polygon in calibration.lanes.items() if inside(x, y, polygon)] if calibration else []
                 if len(lanes) > 1:
                     ambiguous = True
-                if len(lanes) != 1:
-                    continue
-                lane = lanes[0]
-                polygon = calibration.lanes[lane]
-                cx, cy = sum(p.x for p in polygon)/len(polygon), sum(p.y for p in polygon)/len(polygon)
-                upstream = line_side(cx, cy, calibration.stop_line)
-                side = line_side(x, y, calibration.stop_line)
-                if abs(upstream) < .0001:
-                    ambiguous = True
-                    continue
-                if lane != 'outer' and side*upstream < 0:
-                    continue  # Already across the stop line; no longer controlled demand.
+                if lanes:
+                    lane = lanes[0]
+                elif calibration:
+                    # An unmatched detection is still real; choose the nearest
+                    # marked lane for display, without counting it as demand.
+                    lane = min(calibration.lanes, key=lambda name: hypot(
+                        x-sum(p.x for p in calibration.lanes[name])/len(calibration.lanes[name]),
+                        y-sum(p.y for p in calibration.lanes[name])/len(calibration.lanes[name])))
+                else:
+                    lane = ('outer', 'middle', 'inner')[min(2, int(x*3))]
+                distance, passed, measured = (1-y)*625, False, False
+                if calibration and len(lanes) == 1:
+                    polygon = calibration.lanes[lane]
+                    cx, cy = sum(p.x for p in polygon)/len(polygon), sum(p.y for p in polygon)/len(polygon)
+                    upstream = line_side(cx, cy, calibration.stop_line)
+                    side = line_side(x, y, calibration.stop_line)
+                    if abs(upstream) < .0001:
+                        ambiguous = True
+                    else:
+                        passed = side*upstream < 0
+                        measured = lane == 'outer' or not passed
+                        extent = max(abs(line_side(p.x, p.y, calibration.stop_line)) for p in polygon)
+                        distance = min(1, abs(side)/max(extent, .0001))*625
                 history = histories.setdefault(track.track_id, dict(points=deque(), waiting=None, last=now))
                 if fresh_sample:
                     captured = channel.tracked_at
@@ -113,6 +158,9 @@ class VideoMeasurements:
                     history['waiting'] = (history['waiting'] if history['waiting'] is not None else points[0][0]) if stable else None
                     history['last'] = captured
                 stopped = history['waiting'] is not None
+                entries.append(dict(track=track, lane=lane, distance=distance, stopped=stopped, passed=passed))
+                if not measured:
+                    continue
                 if lane == 'outer':
                     value['slip_count'] += 1
                 else:
@@ -121,27 +169,17 @@ class VideoMeasurements:
                         value['queue_count'] += 1
                         value['oldest_wait_seconds'] = max(value['oldest_wait_seconds'],
                             max(0, channel.tracked_at-history['waiting']))
-                extent = max(abs(line_side(p.x, p.y, calibration.stop_line)) for p in polygon)
-                distance = min(1, abs(side)/max(extent, .0001))*665
-                px, py = dict(outer=510, middle=470, inner=430)[lane], 265-distance
-                for _ in range('UTSB'.index(direction)):
-                    px, py = 800-py, px
-                identity = int.from_bytes(sha256(f'{direction}:{channel.tracker_session}:{track.track_id}'.encode()).digest()[:6], 'big') or 1
-                heading = (90+'UTSB'.index(direction)*90+180) % 360-180
-                vehicles.append(VehicleView(id=identity, origin=direction,
-                    movement=dict(outer='left', middle='straight', inner='right')[lane],
-                    kind={'ambulance':'ambulance', 'fire_truck':'fire_engine'}.get(track.class_name, 'car'),
-                    x=px, y=py, heading=heading, stopped=stopped, served=False, distance_to_stop=distance,
-                    lane=lane, target_lane=lane, changing_to=None, stop_reason='stationary' if stopped else None))
+            displayed = map_poses(direction, channel.tracker_session, entries)
+            vehicles.extend(displayed)
             self.samples[direction] = (generation, channel.tracked_id)
             for identity in list(histories):
                 if now-histories[identity]['last'] > 3:
                     del histories[identity]
-            value['usable'] = not ambiguous
-            self.previous[direction] = (channel.session, channel.tracker_session,
-                                        calibration.model_copy(deep=True), value.copy())
+            value['usable'] = calibration is not None and not ambiguous
             if ambiguous:
                 issues[direction] = 'Lajur bertumpang tindih atau garis henti membelah area pengamatan.'
+            self.previous[direction] = (channel.session, channel.tracker_session,
+                calibration.model_copy(deep=True) if calibration else None, value.copy(), displayed, issues.get(direction))
         self.issues, self.vehicles = issues, vehicles
         self.source_sessions = {d:c.session for d,c in hub.channels.items()}
         source = 'cctv' if all(c.source == 'live' for c in hub.channels.values()) else 'recording'

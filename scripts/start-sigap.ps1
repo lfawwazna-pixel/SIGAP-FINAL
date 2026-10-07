@@ -2,7 +2,7 @@ $ErrorActionPreference = 'Stop'
 $sigapProject = Split-Path -Parent $PSScriptRoot
 $sigapPython = Join-Path $sigapProject '.venv\Scripts\python.exe'
 $sigapVision = Join-Path $sigapProject 'work\vision-env\Scripts\python.exe'
-$sigapModel = Join-Path $sigapProject 'models\sigap_yolo26s\best.pt'
+$sigapModel = Join-Path $sigapProject 'models\sigap_yolo26s_stage6_v3_pilot_20261006\best.pt'
 $sigapVite = Join-Path $sigapProject 'frontend\node_modules\vite\bin\vite.js'
 $sigapLogs = Join-Path $sigapProject 'work\runtime'
 foreach ($sigapFile in @($sigapPython,$sigapVision,$sigapModel,$sigapVite,(Join-Path $sigapProject 'frontend\dist\index.html'))) {

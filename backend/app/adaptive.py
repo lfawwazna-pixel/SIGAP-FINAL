@@ -183,13 +183,18 @@ class AdaptiveSender:
 
     def snapshot(self):
         provider = self.video_measurements
-        source = self.batch.source if self.video_mode and self.batch else 'recording' if self.video_mode else 'synthetic'
+        batch = self.batch
+        if self.video_mode and self.video is not None:
+            # Display detection independently of acquiring the phase controller.
+            # All map poses and per-approach timestamps come from this snapshot.
+            batch = provider.snapshot(self.video)
+        source = batch.source if self.video_mode and batch else 'recording' if self.video_mode else 'synthetic'
         return AdaptiveStatus(enabled=self.enabled, source=source, fault=self.fault, status=self.state,
-            message=self.message, policy=self.policy.config, measurements=self.batch,
+            message=self.message, policy=self.policy.config, measurements=batch,
             decisions=([self.preview] if self.preview else [])+list(reversed(self.decisions)),
             auto_resume=self.auto_resume, source_sessions=provider.source_sessions if self.video_mode else {},
             issues=provider.issues if self.video_mode else {},
-            map_vehicles=provider.vehicles if self.video_mode and self.batch else [])
+            map_vehicles=provider.vehicles if self.video_mode and batch else [])
 
 
 class FaultInput(Contract):

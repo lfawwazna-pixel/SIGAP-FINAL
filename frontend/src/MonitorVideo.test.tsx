@@ -8,7 +8,7 @@ import type { TrafficView } from './types/TrafficView'
 
 afterEach(() => { cleanup(); vi.useRealTimers(); vi.unstubAllGlobals(); vi.restoreAllMocks() })
 
-it('shows the same video demand, poses and actual SIGAP phase in ATCS and SIGAP, clearing video poses on fallback', async () => {
+it.each([false, true])('shows identical camera counts in both workspaces after takeover, including pending/unavailable adaptive status (%s)', async (waiting) => {
   vi.useFakeTimers()
   let acquired = true
   let sequence = 1
@@ -43,7 +43,7 @@ it('shows the same video demand, poses and actual SIGAP phase in ATCS and SIGAP,
     if (url.endsWith('/atcs/traffic')) return respond({...synthetic,traffic_sequence:sequence++})
     if (url.endsWith('/control')) return respond({...control,observed_at:new Date().toISOString(),
       state:acquired?'adaptive':'fixed_time',controller:acquired?'SIGAP':'ATCS'})
-    if (url.endsWith('/adaptive')) return respond({...video,status:acquired?'active':'unavailable',
+    if (url.endsWith('/adaptive')) return respond({...video,status:acquired?(waiting?'unavailable':'active'):'unavailable',
       map_vehicles:acquired?video.map_vehicles:[]})
     return respond({},503)
   }))
@@ -51,6 +51,9 @@ it('shows the same video demand, poses and actual SIGAP phase in ATCS and SIGAP,
   await act(async () => { await vi.advanceTimersByTimeAsync(0) })
   expect(screen.getByTestId('countdown').textContent).toBe('18')
   expect(view.container.querySelector('[data-vehicle-id="11"]')).toBeTruthy()
+  expect(view.container.querySelectorAll('.map-vehicle')).toHaveLength(1)
+  const counts = screen.getByRole('table', {name:'Jumlah kendaraan video dan peta'})
+  expect(within(counts).getAllByRole('row').slice(1).map(row => within(row).getAllByRole('cell')[0].textContent)).toEqual(['0','1','0','0'])
   expect(screen.getByText(/SIGAP mengambil alih kendali/)).toBeTruthy()
   const switcher = screen.getByRole('group',{name:'Mode ruang kerja'})
   fireEvent.click(within(switcher).getByRole('button',{name:/SIGAP Adaptif/}))
@@ -61,4 +64,46 @@ it('shows the same video demand, poses and actual SIGAP phase in ATCS and SIGAP,
   await act(async () => { await vi.advanceTimersByTimeAsync(1000) })
   expect(view.container.querySelector('[data-vehicle-id="11"]')).toBeNull()
   expect(screen.getByText(/ATCS mengendalikan · waktu tetap/)).toBeTruthy()
+})
+
+it('shows all tracked vehicles upon selecting SIGAP before controller activation, without valid calibration', async () => {
+  vi.useFakeTimers()
+  let sequence = 1
+  let stale = false
+  const at = new Date().toISOString()
+  const pose = {id:11,origin:'U' as const,movement:'straight' as const,kind:'car' as const,x:470,y:0,heading:90,
+    stopped:false,served:false,distance_to_stop:240,lane:'middle' as const,target_lane:'middle' as const,
+    changing_to:null,stop_reason:null}
+  const video: AdaptiveStatus = {enabled:true,source:'recording',fault:'none',status:'unavailable',message:'Periksa kalibrasi.',
+    auto_resume:false,source_sessions:{},issues:{U:'Kalibrasi belum sesuai.'},decisions:[],
+    policy:{minimum_green:10,maximum_green:60,queue_weight:4,wait_weight:1,age_weight:.5,
+      service_age_target:120,seconds_per_queued_vehicle:2,data_timeout:3},
+    measurements:{intersection_id:config.intersection_id,source:'recording',source_session:secondRunId,sequence:1,
+      approaches:Object.fromEntries(['U','T','S','B'].map(d => [d,{observed_at:at,usable:false,controlled_count:0,
+        queue_count:0,oldest_wait_seconds:0,slip_count:0,exit_available:true}]))},
+    map_vehicles:[pose,{...pose,id:12,origin:'T',x:800,y:470,heading:180},{...pose,id:13,origin:'T',x:830,y:470,heading:180}]}
+  vi.stubGlobal('fetch',vi.fn((url:string) => {
+    if (url.endsWith('/configuration')) return respond(config)
+    if (url.endsWith('/atcs/status')) return respond(statusFixture({sequence_number:sequence++}))
+    if (url.includes('/atcs/events?')) return respond(pageFixture())
+    if (url.endsWith('/adaptive')) return respond({...video, measurements:{...video.measurements,
+      approaches:Object.fromEntries(['U','T','S','B'].map(d => [d,{...video.measurements!.approaches[d],
+        observed_at:new Date(Date.now()-(stale && d==='U'?4000:0)).toISOString()}]))}})
+    return respond({},503)
+  }))
+  const view = render(<Monitor session={sessionFixture()} onLogout={() => undefined} signingOut={false} logoutError={null} />)
+  await act(async () => { await vi.advanceTimersByTimeAsync(0) })
+  expect(view.container.querySelectorAll('.map-vehicle')).toHaveLength(0)
+  fireEvent.click(within(screen.getByRole('group',{name:'Mode ruang kerja'})).getByRole('button',{name:/SIGAP Adaptif/}))
+  await act(async () => { await vi.advanceTimersByTimeAsync(0) })
+  expect(view.container.querySelectorAll('.map-vehicle')).toHaveLength(3)
+  expect(screen.getByText(/3 kendaraan terlacak ditampilkan di peta/)).toBeTruthy()
+  const rows = within(screen.getByRole('table',{name:'Jumlah kendaraan video dan peta'})).getAllByRole('row').slice(1)
+  expect(rows.map(row => within(row).getAllByRole('cell')[0].textContent)).toEqual(['1','2','0','0'])
+  expect(rows.map(row => within(row).getAllByRole('cell')[1].textContent)).toEqual(['—','—','—','—'])
+  expect(screen.getByText(/ATCS mengendalikan · waktu tetap/)).toBeTruthy()
+  stale = true
+  await act(async () => { await vi.advanceTimersByTimeAsync(1000) })
+  expect(view.container.querySelectorAll('.map-vehicle')).toHaveLength(2)
+  expect(view.container.querySelector('[data-vehicle-id="11"]')).toBeNull()
 })

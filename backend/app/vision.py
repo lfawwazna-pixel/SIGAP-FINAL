@@ -26,10 +26,15 @@ class VisionWorker:
 
     async def close(self):
         process, self.process = self.process, None
-        if process and process.returncode is None:
-            with suppress(ProcessLookupError):
-                process.kill()
-                await process.wait()
+        if process:
+            if process.returncode is None:
+                with suppress(ProcessLookupError):
+                    process.kill()
+            # Drain the pipes as well as waiting for the process. On Windows,
+            # wait() alone can leave pipe transports open after the loop stops.
+            with suppress(BrokenPipeError, ConnectionResetError):
+                await process.communicate()
+            await process.wait()
 
     async def infer(self, direction, session, frame_id, jpeg, captured=None, latest=None):
         if not self.enabled or time.monotonic() < self.retry_after:
