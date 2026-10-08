@@ -123,3 +123,21 @@ def test_missing_model_and_expired_work_do_not_break_raw_video(tmp_path):
         channel.frame, channel.received = b'raw', time.monotonic()
         assert channel.view().state == 'playing' and channel.view().tracking.state == 'error'
     asyncio.run(scenario())
+
+
+def test_tracking_observer_runs_only_after_accepted_current_session_result(tmp_path):
+    async def run():
+        c=VideoChannel('U',tmp_path);calls=[];c.tracking_observer=lambda:calls.append(c.tracked_id)
+        c.state='playing';c.frame=b'raw';c.frame_id=1;c.received=time.monotonic()
+        async def infer(*args,**kw):
+            return dict(jpeg=b'overlay',tracks=[],device='cpu',processing_ms=10)
+        c.vision=SimpleNamespace(infer=infer)
+        await c.track(b'raw',1,c.session,.2,c.received)
+        assert calls==[1]
+        async def late(*args,**kw):
+            c.tracker_session=uuid4()
+            return dict(jpeg=b'old',tracks=[],device='cpu',processing_ms=10)
+        c.vision=SimpleNamespace(infer=late)
+        await c.track(b'raw',2,c.session,.4,c.received)
+        assert calls==[1]
+    asyncio.run(run())

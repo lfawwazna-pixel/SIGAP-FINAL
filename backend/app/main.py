@@ -19,6 +19,8 @@ from backend.app.analytics import AnalyticsService, router as analytics_router
 from contracts.configuration import load_config
 from contracts.models import AtcsStatus, Capabilities, Health, IntersectionConfig, TrafficEvents
 from contracts.traffic import TrafficView
+from backend.app.model_quality import ModelQualityReader
+from contracts.model_quality import ModelQuality
 from contracts.history import EventArchivePage
 from typing import Literal
 
@@ -56,8 +58,10 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(control_router)
     app.state.adaptive = AdaptiveSender(settings, config.intersection_id)
     app.include_router(adaptive_router)
+    app.state.model_quality = ModelQualityReader(settings.sigap_yolo_model)
     app.state.video = VideoHub(settings)
     app.state.adaptive.video = app.state.video
+    app.state.video.set_tracking_observer(app.state.adaptive.observe_emergency_frame)
     app.include_router(video_router)
     app.state.analytics = AnalyticsService(settings, config)
     app.include_router(analytics_router)
@@ -92,6 +96,10 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                             cctv='configured' if settings.sigap_camera_urls else 'not_configured',
                             override='available' if ready and len(settings.sigap_control_api_key.get_secret_value()) >= 32 else 'unavailable'))
         return JSONResponse(report.model_dump(mode="json"), status_code=200 if ready else 503)
+
+    @app.get('/api/model-quality', response_model=ModelQuality, dependencies=[Depends(require_operator)])
+    def model_quality():
+        return app.state.model_quality.snapshot()
 
     @app.get("/api/configuration", response_model=IntersectionConfig, dependencies=[Depends(require_operator)])
     def configuration():

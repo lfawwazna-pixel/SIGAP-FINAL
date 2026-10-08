@@ -3,6 +3,7 @@ from typing import Literal
 from uuid import UUID
 from pydantic import AwareDatetime, Field, model_validator
 from contracts.models import Contract, Direction
+from contracts.emergency import EmergencyTarget
 
 
 class ControlPolicy(Contract):
@@ -31,7 +32,7 @@ class ControlCommand(Contract):
     request_id: UUID
     atcs_run_id: UUID
     sender_id: UUID
-    action: Literal['observe', 'activate', 'heartbeat', 'plan', 'release']
+    action: Literal['observe', 'activate', 'heartbeat', 'plan', 'release', 'priority']
     issued_at: AwareDatetime
     expires_at: AwareDatetime
     session_id: UUID | None = None
@@ -42,6 +43,7 @@ class ControlCommand(Contract):
     approach: Direction | None = None
     green_seconds: float | None = Field(default=None, gt=0, le=180, allow_inf_nan=False)
     plan_valid_until: AwareDatetime | None = None
+    priority_target: EmergencyTarget | None = None
 
     @model_validator(mode='after')
     def fields_for_action(self):
@@ -54,8 +56,9 @@ class ControlCommand(Contract):
             'heartbeat': {'session_id', 'sequence'},
             'plan': {'session_id', 'sequence', 'approach', 'green_seconds', 'plan_valid_until'},
             'release': {'session_id', 'expected_revision'},
+            'priority': {'session_id', 'sequence', 'priority_target'},
         }[self.action]
-        if self.model_fields_set - common != fields or any(getattr(self, f) is None for f in fields):
+        if self.model_fields_set - common != fields or any(getattr(self, f) is None for f in fields if f != 'priority_target'):
             raise ValueError('Fields do not match command action')
         if self.action == 'observe' and set(self.observations) != {'U', 'T', 'S', 'B'}:
             raise ValueError('Four observations are required')
@@ -65,7 +68,7 @@ class ControlCommand(Contract):
 class CommandReceipt(Contract):
     request_id: UUID
     atcs_run_id: UUID
-    action: Literal['observe', 'activate', 'heartbeat', 'plan', 'release']
+    action: Literal['observe', 'activate', 'heartbeat', 'plan', 'release', 'priority']
     outcome: Literal['accepted', 'applied', 'rejected', 'cancelled']
     code: str
     message: str
@@ -108,6 +111,8 @@ class ControlStatus(Contract):
     reason: str
     policy: ControlPolicy
     events: list[ControlEvent] = Field(max_length=100)
+    emergency: EmergencyTarget | None = None
+    emergency_serving: bool = False
 
 
 class OperatorControl(Contract):

@@ -20,6 +20,7 @@ class Plan:
     approach: str
     green_seconds: float
     expires: float
+    emergency_id: str | None = None
 
 
 class ControlSupervisor:
@@ -33,7 +34,7 @@ class ControlSupervisor:
         self.observations = {}
         self.data_deadlines = {}
         self.heartbeat_deadline = None
-        self.sequences = {'heartbeat': 0, 'plan': 0}
+        self.sequences = {'heartbeat': 0, 'plan': 0, 'priority': 0}
         self.pending = self.active = None
         self.activation_request = self.release_request = None
         self.wait_until = None
@@ -43,6 +44,10 @@ class ControlSupervisor:
         self.events = deque(maxlen=100)
         self.event_sequence = 0
         self.was_ready = False
+        self.emergency = None
+        self.emergency_deadline = None
+        self.emergency_started = None
+        self.emergency_cancelled = False
 
     def journal(self, code, message, at, request_id=None):
         self.event_sequence += 1
@@ -85,6 +90,9 @@ class ControlSupervisor:
             if receipt and receipt[1].outcome == 'accepted':
                 self.update_receipt(self.activation_request, 'cancelled', code, reason, at)
         self.pending = self.active = None
+        self.emergency = None
+        self.emergency_deadline = self.emergency_started = None
+        self.emergency_cancelled = False
         self.release_request = release_id
         self.journal(code, reason, at, release_id)
         self.engine._record('control_changed', reason, self.engine.phase, self.engine.active_approach)
@@ -103,6 +111,8 @@ class ControlSupervisor:
             self.revoke('HEARTBEAT_LOST', 'Fallback: heartbeat SIGAP terputus.', now, at)
         elif (self.pending and now >= self.pending.expires) or (self.active and now >= self.active.expires):
             self.revoke('PLAN_EXPIRED', 'Fallback: masa berlaku keputusan SIGAP berakhir.', now, at)
+        elif self.emergency and (now >= self.emergency_deadline or self.emergency_started is not None and now-self.emergency_started >= 60):
+            self.revoke('EVP_EVIDENCE_EXPIRED', 'Fallback: bukti EVP kedaluwarsa atau batas prioritas tercapai.', now, at)
         elif self.pending is None and self.wait_until is not None and now >= self.wait_until:
             self.revoke('PLAN_MISSING', 'Fallback: tidak ada keputusan SIGAP berikutnya yang valid.', now, at)
 
@@ -151,7 +161,7 @@ class ControlSupervisor:
                 self.session = uuid4()
                 self.state = 'activating'
                 self.revision += 1
-                self.sequences = {'heartbeat': 0, 'plan': 0}
+                self.sequences = {'heartbeat': 0, 'plan': 0, 'priority': 0}
                 self.heartbeat_deadline = now+self.policy.heartbeat_timeout_seconds
                 self.wait_until = now+self.policy.plan_wait_seconds
                 self.activation_request = command.request_id
@@ -160,14 +170,23 @@ class ControlSupervisor:
             else:
                 if self.session is None or command.session_id != self.session or command.sender_id != self.sender:
                     raise Rejected('SESSION_REVOKED', 'Sesi kendali tidak aktif; diperlukan aktivasi operator baru.')
-                if command.action in ('heartbeat', 'plan'):
+                if command.action in ('heartbeat', 'plan', 'priority'):
                     if command.sequence <= self.sequences[command.action]:
                         raise Rejected('OUT_OF_ORDER', 'Nomor urut perintah tidak lebih baru.')
                 if command.action == 'heartbeat':
                     self.heartbeat_deadline = now+self.policy.heartbeat_timeout_seconds
                     self.sequences['heartbeat'] = command.sequence
                     receipt.outcome, receipt.code, receipt.message = 'applied', 'HEARTBEAT', 'Heartbeat diterima; umur data tetap diperiksa terpisah.'
+                elif command.action == 'priority':
+                    self.priority(command, now, at)
+                    self.sequences['priority'] = command.sequence
+                    queued = self.pending is not None and self.pending.request_id == command.request_id
+                    receipt.outcome = 'accepted' if queued else 'applied'
+                    receipt.code = 'EVP_QUEUED' if queued else 'EVP_OBSERVED'
+                    receipt.message = 'Prioritas EVP menunggu transisi fase ATCS.' if queued else 'Bukti EVP diperiksa; transisi fase tetap milik ATCS.'
                 elif command.action == 'plan':
+                    if self.emergency:
+                        raise Rejected('EVP_ACTIVE', 'Keputusan antrean ditangguhkan selama prioritas EVP.')
                     horizon = (command.plan_valid_until-at).total_seconds()
                     if not self.policy.minimum_green_seconds <= command.green_seconds <= self.policy.maximum_green_seconds:
                         raise Rejected('GREEN_BOUNDS', 'Durasi hijau di luar batas pengendali.')
@@ -185,7 +204,7 @@ class ControlSupervisor:
         except Rejected as exc:
             receipt.outcome, receipt.code, receipt.message = 'rejected', exc.code, exc.message
         receipt.session_id, receipt.revision = self.session, self.revision
-        if command.action not in ('heartbeat', 'observe') or receipt.outcome == 'rejected':
+        if command.action not in ('heartbeat', 'observe', 'priority') or receipt.outcome == 'rejected':
             self.journal(receipt.code, receipt.message, at, command.request_id)
         return receipt.model_copy(deep=True)
 
@@ -217,6 +236,52 @@ class ControlSupervisor:
         self.observations = command.observations
         self.observation_sequence = command.sequence
 
+    def priority(self, command, now, at):
+        target = command.priority_target
+        if target is None:
+            if self.emergency is None:
+                return
+            identity = self.emergency.event_id
+            if self.pending and self.pending.emergency_id == identity:
+                self.update_receipt(self.pending.request_id, 'cancelled', 'EVP_CLEARED', 'EVP selesai sebelum rencana diterapkan.', at)
+                self.pending = None
+            self.emergency = None
+            self.emergency_deadline = self.emergency_started = None
+            self.emergency_cancelled = bool(self.active and self.active.emergency_id)
+            self.reason = 'EVP selesai; kembali ke adaptif setelah kuning dan clearance.'
+            self.journal('EVP_CLEARED', self.reason, at, command.request_id)
+            self.engine._record('control_changed', self.reason, self.engine.phase, self.engine.active_approach)
+            return
+        if self.source != 'cctv':
+            raise Rejected('EVP_SOURCE', 'Prioritas otomatis hanya menerima bukti CCTV.')
+        age = (at-target.observed_at).total_seconds()
+        if target.confidence < .6 or age >= 2 or age < -self.policy.clock_skew_seconds:
+            raise Rejected('EVP_EVIDENCE', 'Bukti EVP lemah, terlambat, atau jam tidak sesuai.')
+        if target.direction not in self.observations or not self.observations[target.direction].usable:
+            raise Rejected('EVP_APPROACH', 'Pendekat EVP belum terkalibrasi dan siap.')
+        if self.emergency and target.event_id != self.emergency.event_id:
+            raise Rejected('EVP_BUSY', 'Target prioritas dikunci sampai selesai.')
+        if self.emergency and (target.kind != self.emergency.kind or target.direction != self.emergency.direction or target.source_session != self.emergency.source_session or target.track_id != self.emergency.track_id):
+            raise Rejected('EVP_IDENTITY', 'Identitas target EVP berubah.')
+        if self.emergency and target.observed_at < self.emergency.observed_at:
+            raise Rejected('EVP_REPLAY', 'Bukti EVP tidak boleh mundur.')
+        fresh = self.emergency is None or target.observed_at > self.emergency.observed_at
+        if fresh:
+            self.emergency_deadline = now+max(0,2-max(0,age))
+        first = self.emergency is None
+        self.emergency = target.model_copy(deep=True)
+        self.emergency_cancelled = False
+        if not first:
+            return  # Evidence renews its lease, never the maximum green.
+        self.emergency_started = now
+        if self.pending:
+            self.update_receipt(self.pending.request_id,'cancelled','EVP_PREEMPTED','Rencana antrean digantikan prioritas EVP.',at)
+        seconds = min(60,self.policy.maximum_green_seconds)
+        self.pending = Plan(command.request_id,target.direction,seconds,now+self.policy.maximum_plan_horizon_seconds,target.event_id)
+        self.reason = f'EVP {target.kind} dari {target.direction}: menunggu minimum hijau, kuning, semua merah dan area konflik kosong.'
+        self.journal('EVP_CONFIRMED',self.reason,at,command.request_id)
+        self.engine._record('control_changed',self.reason,self.engine.phase,self.engine.active_approach)
+
     def apply_plan(self, now, at):
         plan = self.pending
         if now + plan.green_seconds > plan.expires:
@@ -227,7 +292,9 @@ class ControlSupervisor:
         self.state = 'adaptive'
         self.revision += 1
         self.wait_until = now+plan.green_seconds+self.engine.config.fixed_time.yellow_seconds+self.engine.config.fixed_time.all_red_min_seconds+self.policy.plan_wait_seconds
-        self.reason = f'Keputusan SIGAP diterapkan: {plan.approach}, hijau {plan.green_seconds:g} detik.'
+        self.emergency_cancelled = False
+        self.reason = (f'Prioritas EVP diterapkan: {self.emergency.kind} dari {plan.approach}; hijau maksimum {plan.green_seconds:g} detik.'
+                       if plan.emergency_id and self.emergency else f'Keputusan SIGAP diterapkan: {plan.approach}, hijau {plan.green_seconds:g} detik.')
         self.engine._transition('green', plan.approach, plan.green_seconds, self.reason)
         self.update_receipt(plan.request_id, 'applied', 'PLAN_APPLIED', self.reason, at)
         if self.activation_request:
@@ -258,7 +325,8 @@ class ControlSupervisor:
             data_remaining_seconds=max(0, min(self.data_deadlines.values())-now) if self.data_deadlines else None,
             pending_request_id=self.pending.request_id if self.pending else None,
             active_request_id=self.active.request_id if self.active else None,
-            fallback_code=self.fallback_code, reason=self.reason, policy=self.policy, events=list(self.events))
+            fallback_code=self.fallback_code, reason=self.reason, policy=self.policy, events=list(self.events), emergency=self.emergency,
+            emergency_serving=bool(self.emergency and self.active and self.active.emergency_id == self.emergency.event_id and self.engine.phase == 'green'))
 
 
 class ManagedEngine(FixedTimeEngine):
@@ -286,7 +354,7 @@ class ManagedEngine(FixedTimeEngine):
         self.sequence_number += 1
         timing = self.config.fixed_time
         if self.phase == 'green':
-            interrupted = state in ('activating', 'returning_atcs')
+            interrupted = state in ('activating', 'returning_atcs') or self.control.emergency_cancelled or bool(self.control.pending and self.control.pending.emergency_id and (not self.control.active or self.control.active.emergency_id != self.control.pending.emergency_id))
             finish = min(self.deadline, self.phase_started+self.control.policy.minimum_green_seconds) if interrupted else self.deadline
             if now >= finish:
                 self._transition('yellow', self.active_approach, timing.yellow_seconds, 'Transisi kuning; pergantian kendali/fase menunggu clearance.')
@@ -320,7 +388,7 @@ class ManagedEngine(FixedTimeEngine):
                   'mode': 'adaptive' if state == 'adaptive' else 'fallback' if state == 'returning_atcs' else 'fixed_time'}
         if self.clearance_state == 'waiting_command':
             update['remaining_seconds'] = max(0, self.control.wait_until-self.last_tick)
-        if self.phase == 'green' and (state == 'returning_atcs' or (state == 'activating' and self.control.pending)):
+        if self.phase == 'green' and (state == 'returning_atcs' or (state == 'activating' and self.control.pending) or self.control.emergency_cancelled or bool(self.control.pending and self.control.pending.emergency_id and (not self.control.active or self.control.active.emergency_id != self.control.pending.emergency_id))):
             update['remaining_seconds'] = max(0, min(self.deadline, self.phase_started+self.control.policy.minimum_green_seconds)-self.last_tick)
         return report.model_copy(update=update)
 

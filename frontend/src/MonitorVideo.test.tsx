@@ -13,7 +13,7 @@ it.each([false, true])('shows identical camera counts in both workspaces after t
   let acquired = true
   let sequence = 1
   const at = new Date().toISOString()
-  const video: AdaptiveStatus = { enabled:true, source:'recording', fault:'none', status:'active', message:'SIGAP aktif.',
+  const video: AdaptiveStatus = {emergency:{state:"idle",target:null,candidates:[],focus:false,message:"",events:[]}, enabled:true, source:'recording', fault:'none', status:'active', message:'SIGAP aktif.',
     auto_resume:true, source_sessions:{U:runId,T:runId,S:runId,B:runId}, issues:{}, decisions:[],
     policy:{video_baseline_floor_ratio:.75,video_maximum_drop_ratio:.2,minimum_green:10,maximum_green:60,queue_weight:4,wait_weight:1,age_weight:.5,
       service_age_target:120,seconds_per_queued_vehicle:2,data_timeout:3},
@@ -22,7 +22,7 @@ it.each([false, true])('shows identical camera counts in both workspaces after t
         queue_count:1,oldest_wait_seconds:7,slip_count:0,exit_available:true,queue_visibility:'partial' as const,occupancy_ratio:0,queue_reaches_boundary:false}]))},
     map_vehicles:[{id:11,origin:'T',movement:'straight',kind:'car',x:1100,y:470,heading:180,
       stopped:true,served:false,distance_to_stop:200,lane:'middle',target_lane:'middle',changing_to:null,stop_reason:'stationary'}] }
-  const control: ControlStatus = {intersection_id:config.intersection_id,atcs_run_id:runId,observed_at:at,
+  const control: ControlStatus = {emergency:null,emergency_serving:false,intersection_id:config.intersection_id,atcs_run_id:runId,observed_at:at,
     available:true,configured:true,allow_test_source:false,state:'adaptive',controller:'SIGAP',revision:3,
     sender_id:secondRunId,source:'cctv',ready:true,readiness_reason:'Sumber siap.',activation_required:false,
     session_id:secondRunId,heartbeat_remaining_seconds:3,data_remaining_seconds:3,pending_request_id:null,
@@ -86,7 +86,7 @@ it('shows all tracked vehicles upon selecting SIGAP before controller activation
   const pose = {id:11,origin:'U' as const,movement:'straight' as const,kind:'car' as const,x:470,y:0,heading:90,
     stopped:false,served:false,distance_to_stop:240,lane:'middle' as const,target_lane:'middle' as const,
     changing_to:null,stop_reason:null}
-  const video: AdaptiveStatus = {enabled:true,source:'recording',fault:'none',status:'unavailable',message:'Periksa kalibrasi.',
+  const video: AdaptiveStatus = {emergency:{state:"idle",target:null,candidates:[],focus:false,message:"",events:[]},enabled:true,source:'recording',fault:'none',status:'unavailable',message:'Periksa kalibrasi.',
     auto_resume:false,source_sessions:{},issues:{U:'Kalibrasi belum sesuai.'},decisions:[],
     policy:{video_baseline_floor_ratio:.75,video_maximum_drop_ratio:.2,minimum_green:10,maximum_green:60,queue_weight:4,wait_weight:1,age_weight:.5,
       service_age_target:120,seconds_per_queued_vehicle:2,data_timeout:3},

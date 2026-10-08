@@ -21,6 +21,7 @@ class VisionWorker:
         self.fps = 5  # Matches the shared decoder; buffer duration is two seconds.
         self.lock = asyncio.Lock()
         self.process = None
+        self.focus = False
         self.retry_after = 0.0
         self.message = 'YOLO belum diaktifkan.' if not self.enabled else 'YOLO siap dimulai saat video berjalan.'
 
@@ -60,7 +61,7 @@ class VisionWorker:
                             str(self.model), cwd=PROJECT_ROOT, stdin=asyncio.subprocess.PIPE,
                             stdout=asyncio.subprocess.PIPE, stderr=log, limit=4_000_000, **flags)
                 payload = dict(direction=direction, session=str(session), frame_id=frame_id, fps=self.fps,
-                    jpeg=base64.b64encode(jpeg).decode('ascii'))
+                    jpeg=base64.b64encode(jpeg).decode('ascii'), focus_evp=self.focus)
                 self.process.stdin.write((json.dumps(payload) + '\n').encode())
                 await self.process.stdin.drain()
                 # Cold model startup can take longer than subsequent inference.

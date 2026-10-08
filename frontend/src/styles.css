@@ -474,3 +474,13 @@ footer > span:last-child { white-space: nowrap; }
   .brand .sigap-logo { width: 48px; height: 52px; }
   .login-brand-symbol { width: 80px; height: 87px; padding: 0; }
 }
+
+/* EVP evidence and safe handover are visible in both operator workspaces. */
+.evp-panel { display:flex; align-items:center; gap:20px; background:#fff8f5; border:1px solid #e9c7be; border-left:5px solid #b84138; border-radius:12px; padding:22px 24px; margin:18px 0; }
+.evp-symbol { display:grid; place-items:center; background:#fbe3df; border-radius:50%; color:#a33029; width:54px; height:54px; flex:0 0 54px; font-size:28px; }
+.evp-copy { flex:1; } .evp-copy h2 { font-size:21px; margin:4px 0 8px; } .evp-copy p { margin:6px 0; }
+.evp-panel--active { background:#fff2ed; border-color:#d87866; }
+.evp-steps { display:flex; gap:10px; flex-wrap:wrap; padding-left:24px; width:280px; font-size:12px; color:#62514c; } .evp-steps li { padding:6px 10px; border-radius:8px; background:#fff; border:1px solid #efddd6; } .evp-steps li[data-current=true] { color:#8e2c25; font-weight:600; border-color:#c55e50; background:#ffe6de; }
+@media(max-width:800px) { .evp-panel { flex-wrap:wrap; padding:16px; gap:14px; } .evp-steps { width:100%; } }
+
+.model-quality-panel{margin:20px 0;border:1px solid #c9d8e1;border-radius:10px;background:white;overflow:hidden}.model-quality-panel>summary{cursor:pointer;padding:18px 22px;font-weight:600;color:#174d72}.model-quality-content{padding:0 22px 20px}.model-quality-content label{display:flex;align-items:center;gap:12px;margin:14px 0}.model-quality-content select{padding:8px;border:1px solid #aec2d1;border-radius:6px}.model-quality-content li{font-size:13px;color:#5b6e7c;margin:6px 0}

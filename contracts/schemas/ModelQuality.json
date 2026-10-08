@@ -1,0 +1,109 @@
+{
+  "$defs": {
+    "ClassMetrics": {
+      "additionalProperties": false,
+      "properties": {
+        "precision": {
+          "maximum": 1,
+          "minimum": 0,
+          "title": "Precision",
+          "type": "number"
+        },
+        "recall": {
+          "maximum": 1,
+          "minimum": 0,
+          "title": "Recall",
+          "type": "number"
+        },
+        "map50": {
+          "maximum": 1,
+          "minimum": 0,
+          "title": "Map50",
+          "type": "number"
+        },
+        "map5095": {
+          "maximum": 1,
+          "minimum": 0,
+          "title": "Map5095",
+          "type": "number"
+        }
+      },
+      "required": [
+        "precision",
+        "recall",
+        "map50",
+        "map5095"
+      ],
+      "title": "ClassMetrics",
+      "type": "object"
+    },
+    "EvaluationSplit": {
+      "additionalProperties": false,
+      "properties": {
+        "per_class": {
+          "additionalProperties": {
+            "$ref": "#/$defs/ClassMetrics"
+          },
+          "title": "Per Class",
+          "type": "object"
+        }
+      },
+      "required": [
+        "per_class"
+      ],
+      "title": "EvaluationSplit",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "available": {
+      "title": "Available",
+      "type": "boolean"
+    },
+    "model_label": {
+      "title": "Model Label",
+      "type": "string"
+    },
+    "model_sha256": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Model Sha256"
+    },
+    "reports": {
+      "additionalProperties": {
+        "$ref": "#/$defs/EvaluationSplit"
+      },
+      "title": "Reports",
+      "type": "object"
+    },
+    "limitations": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Limitations",
+      "type": "array"
+    },
+    "message": {
+      "title": "Message",
+      "type": "string"
+    }
+  },
+  "required": [
+    "available",
+    "model_label",
+    "model_sha256",
+    "reports",
+    "limitations",
+    "message"
+  ],
+  "title": "ModelQuality",
+  "type": "object"
+}

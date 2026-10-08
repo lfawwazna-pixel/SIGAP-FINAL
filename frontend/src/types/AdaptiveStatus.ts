@@ -54,6 +54,157 @@ export type ChangingTo = ("outer" | "middle" | "inner") | null;
 export type StopReason =
   ("following" | "yielding" | "signal" | "exit_blocked" | "conflict" | "safety_gap" | "stationary") | null;
 export type MapVehicles = VehicleView[];
+export type State = "idle" | "confirming" | "confirmed" | "servicing" | "recovering" | "unavailable";
+export type EventId = string;
+export type Direction = "U" | "T" | "S" | "B";
+export type SourceSession1 = string;
+export type TrackId = number;
+export type Kind1 = "ambulance" | "fire_truck";
+export type Confidence = number;
+export type DistanceToStop1 = number;
+export type ObservedAt1 = string;
+/**
+ * @maxItems 32
+ */
+export type Candidates = EmergencyTarget[];
+export type Focus = boolean;
+export type Message1 = string;
+/**
+ * @maxItems 20
+ */
+export type Events =
+  | []
+  | [string]
+  | [string, string]
+  | [string, string, string]
+  | [string, string, string, string]
+  | [string, string, string, string, string]
+  | [string, string, string, string, string, string]
+  | [string, string, string, string, string, string, string]
+  | [string, string, string, string, string, string, string, string]
+  | [string, string, string, string, string, string, string, string, string]
+  | [string, string, string, string, string, string, string, string, string, string]
+  | [string, string, string, string, string, string, string, string, string, string, string]
+  | [string, string, string, string, string, string, string, string, string, string, string, string]
+  | [string, string, string, string, string, string, string, string, string, string, string, string, string]
+  | [string, string, string, string, string, string, string, string, string, string, string, string, string, string]
+  | [
+      string,
+      string,
+      string,
+      string,
+      string,
+      string,
+      string,
+      string,
+      string,
+      string,
+      string,
+      string,
+      string,
+      string,
+      string
+    ]
+  | [
+      string,
+      string,
+      string,
+      string,
+      string,
+      string,
+      string,
+      string,
+      string,
+      string,
+      string,
+      string,
+      string,
+      string,
+      string,
+      string
+    ]
+  | [
+      string,
+      string,
+      string,
+      string,
+      string,
+      string,
+      string,
+      string,
+      string,
+      string,
+      string,
+      string,
+      string,
+      string,
+      string,
+      string,
+      string
+    ]
+  | [
+      string,
+      string,
+      string,
+      string,
+      string,
+      string,
+      string,
+      string,
+      string,
+      string,
+      string,
+      string,
+      string,
+      string,
+      string,
+      string,
+      string,
+      string
+    ]
+  | [
+      string,
+      string,
+      string,
+      string,
+      string,
+      string,
+      string,
+      string,
+      string,
+      string,
+      string,
+      string,
+      string,
+      string,
+      string,
+      string,
+      string,
+      string,
+      string
+    ]
+  | [
+      string,
+      string,
+      string,
+      string,
+      string,
+      string,
+      string,
+      string,
+      string,
+      string,
+      string,
+      string,
+      string,
+      string,
+      string,
+      string,
+      string,
+      string,
+      string,
+      string
+    ];
 
 export interface AdaptiveStatus {
   enabled: Enabled;
@@ -68,6 +219,7 @@ export interface AdaptiveStatus {
   source_sessions: SourceSessions;
   issues: Issues;
   map_vehicles: MapVehicles;
+  emergency: EmergencyStatus;
 }
 export interface AdaptivePolicyConfig {
   video_baseline_floor_ratio: VideoBaselineFloorRatio;
@@ -141,4 +293,22 @@ export interface VehicleView {
   target_lane: TargetLane;
   changing_to: ChangingTo;
   stop_reason: StopReason;
+}
+export interface EmergencyStatus {
+  state: State;
+  target: EmergencyTarget | null;
+  candidates: Candidates;
+  focus: Focus;
+  message: Message1;
+  events: Events;
+}
+export interface EmergencyTarget {
+  event_id: EventId;
+  direction: Direction;
+  source_session: SourceSession1;
+  track_id: TrackId;
+  kind: Kind1;
+  confidence: Confidence;
+  distance_to_stop: DistanceToStop1;
+  observed_at: ObservedAt1;
 }

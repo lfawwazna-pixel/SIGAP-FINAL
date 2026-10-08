@@ -2,7 +2,7 @@
 
 export type RequestId = string;
 export type AtcsRunId = string;
-export type Action = "observe" | "activate" | "heartbeat" | "plan" | "release";
+export type Action = "observe" | "activate" | "heartbeat" | "plan" | "release" | "priority";
 export type Outcome = "accepted" | "applied" | "rejected" | "cancelled";
 export type Code = string;
 export type Message = string;

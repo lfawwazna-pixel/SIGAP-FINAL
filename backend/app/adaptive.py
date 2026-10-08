@@ -15,6 +15,7 @@ from contracts.adaptive import AdaptiveStatus, MeasurementBatch
 from contracts.control import ControlCommand, CommandReceipt, ControlStatus
 from contracts.models import Contract
 from backend.app.measurements import VideoMeasurements
+from backend.app.emergency import EmergencyCoordinator
 
 
 class AdaptiveSender:
@@ -23,6 +24,11 @@ class AdaptiveSender:
         self.enabled = self.video_mode or settings.sigap_adaptive_synthetic
         self.video = None
         self.video_measurements = VideoMeasurements(intersection)
+        self.emergency = EmergencyCoordinator(enabled=settings.sigap_evp_enabled)
+        self.priority_session = None
+        self.priority_sent = False
+        self.emergency_serving = False
+        self.control_owned = False
         self.auto_resume = False
         self.held = False
         self.lock = asyncio.Lock()
@@ -33,7 +39,7 @@ class AdaptiveSender:
         self.policy = AdaptivePolicy()
         self.policy.baseline = load_config(settings.sigap_config_path).fixed_time.green_seconds
         self.started = time.monotonic()
-        self.sequences = dict(observe=0, heartbeat=0, plan=0)
+        self.sequences = dict(observe=0, heartbeat=0, plan=0, priority=0)
         self.batch = self.frozen = self.preview = None
         self.last_measurement = None
         self.fault = 'none'
@@ -42,6 +48,13 @@ class AdaptiveSender:
         self.decisions = []
         self.applied = None
         self.task = None
+
+    def observe_emergency_frame(self):
+        # Consume every accepted tracking result; controller HTTP polling is slower
+        # than the camera and must not discard fresh confirmation evidence.
+        if self.video_mode:
+            self.emergency.update(self.video, control_active=bool(self.control_owned
+                and not self.held and self.fault == 'none'))
 
     async def start(self, client):
         self.client = client
@@ -61,7 +74,7 @@ class AdaptiveSender:
             fields['sequence'] = self.sequences[action]
         cmd = ControlCommand(request_id=uuid4(), atcs_run_id=status.atcs_run_id, sender_id=self.sender,
             action=action, issued_at=at, expires_at=at+timedelta(seconds=3), **fields)
-        r = await self.client.post('/control/commands', headers=self.headers, json=cmd.model_dump(mode='json', exclude_none=True))
+        r = await self.client.post('/control/commands', headers=self.headers, json=cmd.model_dump(mode='json', include=cmd.model_fields_set))
         if r.status_code not in (200, 409):
             r.raise_for_status()
         receipt = CommandReceipt.model_validate(r.json())
@@ -76,6 +89,7 @@ class AdaptiveSender:
     async def hold(self):
         async with self.lock:
             self.auto_resume, self.held = False, True
+            self.control_owned = False
             # Stop renewing control even if the release cannot be delivered.
             # ATCS then expires the heartbeat independently.
             try:
@@ -88,8 +102,11 @@ class AdaptiveSender:
 
     async def _cycle(self):
         if self.fault == 'sender_stopped':
+            self.control_owned = False
             self.state, self.message = 'unavailable', 'Uji pengirim berhenti: heartbeat dan pengamatan dihentikan.'
             self.batch = self.preview = None
+            if self.video is not None:
+                self.video.vision.focus = False
             return
         r = await self.client.get('/control'); r.raise_for_status()
         status = ControlStatus.model_validate(r.json())
@@ -136,6 +153,7 @@ class AdaptiveSender:
             raise ValueError(receipt.message)
         r = await self.client.get('/control'); r.raise_for_status()
         status = ControlStatus.model_validate(r.json())
+        self.control_owned = bool(status.session_id and status.sender_id == self.sender and not self.held)
         now, at = time.monotonic()-self.started, datetime.now(timezone.utc)
         if status.active_request_id and status.active_request_id != self.applied:
             decision = next((d for d in self.decisions if d.request_id == status.active_request_id), None)
@@ -150,6 +168,12 @@ class AdaptiveSender:
         self.state = 'active' if status.state == 'adaptive' and status.sender_id == self.sender else 'ready' if status.ready else 'unavailable'
         self.message = ('SIGAP mengambil alih kendali berdasarkan YOLO + ByteTrack.' if self.state == 'active'
             else 'Empat pendekat siap; aktifkan kendali SIGAP.' if self.video_mode else 'Adaptif menggunakan data buatan; bukan deteksi video.') if status.ready else status.readiness_reason
+        target = self.emergency.update(self.video, control_active=bool(status.session_id and status.sender_id == self.sender and not self.held)).target if self.video_mode else None
+        self.emergency_serving = status.emergency_serving
+        if self.emergency.state == 'recovering' and not status.emergency and not status.emergency_serving and status.state == 'fixed_time':
+            self.emergency.recovered()
+        if self.video is not None:
+            self.video.vision.focus = bool(target and status.session_id and status.sender_id == self.sender and not self.held)
         if self.held:
             return
         if self.video_mode and self.auto_resume and status.ready and status.state == 'fixed_time' and status.sender_id == self.sender:
@@ -158,10 +182,31 @@ class AdaptiveSender:
         if status.sender_id != self.sender or not status.session_id:
             return  # First acquisition requires operator activation; video recovery may resume.
         await self.command(status, 'heartbeat', session_id=status.session_id)
+        if self.priority_session != status.session_id:
+            self.priority_session, self.priority_sent = status.session_id, False
+        if self.video_mode and (target is not None or self.priority_sent or status.emergency is not None):
+            receipt = await self.command(status, 'priority', session_id=status.session_id, priority_target=target)
+            if receipt.outcome == 'rejected':
+                raise ValueError(receipt.message)
+            self.priority_sent = target is not None
+            if target is not None:
+                self.message = 'Prioritas EVP terkonfirmasi; keputusan antrean ditangguhkan.'
+                return
+            r = await self.client.get('/control'); r.raise_for_status()
+            status = ControlStatus.model_validate(r.json())
+            self.emergency_serving = status.emergency_serving
+        phase = None
+        if self.emergency.state == 'recovering' and not status.emergency and not status.emergency_serving:
+            r = await self.client.get('/status'); r.raise_for_status()
+            phase = r.json()
+            # A cleared target may still own the minimum green/yellow interval.
+            if status.state == 'fixed_time' or phase['phase'] == 'all_red':
+                self.emergency.recovered()
         if not status.ready or self.preview.approach is None or status.pending_request_id:
             return
-        r = await self.client.get('/status'); r.raise_for_status()
-        phase = r.json()
+        if phase is None:
+            r = await self.client.get('/status'); r.raise_for_status()
+            phase = r.json()
         # Decide near the next boundary, not a whole green phase in advance.
         if status.state == 'adaptive' and phase['phase'] == 'green' and phase['remaining_seconds'] > 1:
             return
@@ -180,9 +225,12 @@ class AdaptiveSender:
             except asyncio.CancelledError:
                 raise
             except Exception:
+                self.control_owned = False
                 # Do not manufacture fresh measurements on errors. ATCS owns the timeout.
                 self.state, self.message = 'unavailable', 'Pengukuran atau komunikasi adaptif terputus. ATCS memantau fallback.'
                 self.batch = self.preview = None
+                if self.video is not None:
+                    self.video.vision.focus = False
             await asyncio.sleep(.5)
 
     def snapshot(self):
@@ -198,7 +246,8 @@ class AdaptiveSender:
             decisions=([self.preview] if self.preview else [])+list(reversed(self.decisions)),
             auto_resume=self.auto_resume, source_sessions=provider.source_sessions if self.video_mode else {},
             issues=provider.issues if self.video_mode else {},
-            map_vehicles=provider.vehicles if self.video_mode and batch else [])
+            map_vehicles=provider.vehicles if self.video_mode and batch else [],
+            emergency=self.emergency.snapshot(servicing=self.emergency_serving))
 
 
 class FaultInput(Contract):

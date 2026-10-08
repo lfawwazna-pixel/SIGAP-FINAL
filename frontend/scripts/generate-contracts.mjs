@@ -8,10 +8,10 @@ await mkdir(schemaDir, { recursive: true })
 // Git may check out generated files with CRLF on Windows.
 const normalizeNewlines = (value) => value.replaceAll('\r\n', '\n')
 const controlTypes = ['ControlStatus', 'CommandReceipt', 'OperatorControl', 'ControlCommand']
-for (const name of ['Health', 'AtcsStatus', 'IntersectionConfig', 'TrafficEvent', 'TrafficEvents', 'SessionView', 'TrafficView', 'AdaptiveStatus', 'MeasurementBatch', 'VideoStatus', 'EventArchivePage', 'AnalyticsView', 'ComparisonReport', 'ComparisonInput', ...controlTypes]) {
+for (const name of ['Health', 'AtcsStatus', 'IntersectionConfig', 'TrafficEvent', 'TrafficEvents', 'SessionView', 'TrafficView', 'AdaptiveStatus', 'MeasurementBatch', 'VideoStatus', 'EventArchivePage', 'AnalyticsView', 'ComparisonReport', 'ComparisonInput', 'ModelQuality', ...controlTypes]) {
   const schema = fileURLToPath(new URL(`../../contracts/schemas/${name}.json`, import.meta.url))
   const value = await compileFromFile(schema, {
-    bannerComment: `/* Generated from contracts/${['AnalyticsView','ComparisonReport','ComparisonInput'].includes(name) ? 'analytics' : controlTypes.includes(name) ? 'control' : name === 'TrafficView' ? 'traffic' : name === 'EventArchivePage' ? 'history' : name === 'VideoStatus' ? 'video' : ['AdaptiveStatus', 'MeasurementBatch'].includes(name) ? 'adaptive' : 'models'}.py. Do not edit manually. */`,
+    bannerComment: `/* Generated from contracts/${name === 'ModelQuality' ? 'model_quality' : ['AnalyticsView','ComparisonReport','ComparisonInput'].includes(name) ? 'analytics' : controlTypes.includes(name) ? 'control' : name === 'TrafficView' ? 'traffic' : name === 'EventArchivePage' ? 'history' : name === 'VideoStatus' ? 'video' : ['AdaptiveStatus', 'MeasurementBatch'].includes(name) ? 'adaptive' : 'models'}.py. Do not edit manually. */`,
     declareExternallyReferenced: true,
   })
   const file = `${dir}/${name}.ts`

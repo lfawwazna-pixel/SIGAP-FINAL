@@ -12,6 +12,8 @@ import { MapZoom } from './MapZoom'
 import { SigapLogo } from './SigapLogo'
 import { AdaptivePanel, useAdaptive } from './AdaptivePanel'
 import { VideoPanel } from './VideoPanel'
+import { ModelQualityPanel } from './ModelQualityPanel'
+import { EmergencyPanel } from './EmergencyPanel'
 import { freshVideoObservation, videoMapVehicles, useVideoMapData } from './videoMap'
 
 const connectionLabels: Record<Connection, string> = {
@@ -58,7 +60,7 @@ export function Monitor({ session, onLogout, signingOut, logoutError }: {
     : (workspace === 'atcs' || control.status?.source === 'integration_test') && live && traffic.data?.run_id === live.run_id ? traffic.data.vehicles : []
   const selectedSignal = signals?.[selected] ?? 'unknown'
   const filtered = [...journal.events].reverse().filter(event => eventFilter === 'all'
-    || (eventFilter === 'phase' ? event.event_type === 'phase_changed' : ['fault', 'recovered', 'clearance_held', 'service_stopped'].includes(event.event_type)))
+    || (eventFilter === 'phase' ? event.event_type === 'phase_changed' : ['fault', 'recovered', 'clearance_held', 'service_stopped', 'control_changed'].includes(event.event_type)))
   const visibleEvents = filtered.slice(0, 20)
   const phaseText = live?.phase ? phaseNames[live.phase] : 'Belum diketahui'
 
@@ -92,6 +94,7 @@ export function Monitor({ session, onLogout, signingOut, logoutError }: {
       <div className="background-atcs" role="status"><span className="signal-dot" /><strong>{live?.controller === 'SIGAP' ? 'SIGAP mengambil alih kendali · ATCS mengikuti fase adaptif' : control.status?.state === 'activating' ? 'SIGAP menunggu transisi aman' : control.status?.state === 'returning_atcs' ? 'Fallback · kembali ke ATCS' : 'ATCS mengendalikan · waktu tetap'}</strong> · {live?.phase ? `${phaseNames[live.phase]} ${live.active_approach ?? ''} · ${live.remaining_seconds != null ? `${Math.ceil(live.remaining_seconds)} dtk` : 'menunggu konflik'}` : 'status belum terverifikasi'}</div>
       {control.status?.fallback_code && <p className="connection-note" role="status"><strong>{control.status.state === 'returning_atcs' ? 'Transisi ke ATCS.' : 'Catatan pengendali.'}</strong> {control.status.reason}</p>}
       {workspace === 'sigap' && <><ControlPanel control={control} mayControl={mayControl} allowSynthetic={adaptive.data?.source === 'synthetic' && adaptive.data.enabled} autoResume={adaptive.data?.auto_resume} /><AdaptivePanel feed={adaptive} csrf={session.csrf_token} mayControl={mayControl} /></>}
+      <EmergencyPanel emergency={adaptive.data?.emergency} control={control.status} />
       <VideoPanel workspace={workspace} csrf={session.csrf_token} mayControl={mayControl} />
       <SimulationWorkspace intersection={config?.intersection_id} csrf={session.csrf_token} active={workspace === 'simulation'} />
       <div hidden={workspace === 'simulation'}>
@@ -146,6 +149,7 @@ export function Monitor({ session, onLogout, signingOut, logoutError }: {
         </div>
       </section>
       </div>
+      {workspace !== 'simulation' && <ModelQualityPanel active={Boolean(config)} />}
       <Readiness snapshot={snapshot} />
       <footer><span><strong>SIGAP</strong> — Sistem Pengaturan Fase Lampu Adaptif Berbasis CCTV dan Deteksi Kendaraan YOLO.</span><span>Video bersama · YOLO26s + ByteTrack</span></footer>
     </main>

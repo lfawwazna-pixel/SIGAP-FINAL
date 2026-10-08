@@ -38,6 +38,15 @@ export type RequestId = string | null;
  * @maxItems 100
  */
 export type Events = ControlEvent[];
+export type EventId = string;
+export type Direction = "U" | "T" | "S" | "B";
+export type SourceSession = string;
+export type TrackId = number;
+export type Kind = "ambulance" | "fire_truck";
+export type Confidence = number;
+export type DistanceToStop = number;
+export type ObservedAt1 = string;
+export type EmergencyServing = boolean;
 
 export interface ControlStatus {
   intersection_id: IntersectionId;
@@ -63,6 +72,8 @@ export interface ControlStatus {
   reason: Reason;
   policy: ControlPolicy;
   events: Events;
+  emergency: EmergencyTarget | null;
+  emergency_serving: EmergencyServing;
 }
 export interface ControlPolicy {
   heartbeat_timeout_seconds: HeartbeatTimeoutSeconds;
@@ -80,4 +91,14 @@ export interface ControlEvent {
   code: Code;
   message: Message;
   request_id: RequestId;
+}
+export interface EmergencyTarget {
+  event_id: EventId;
+  direction: Direction;
+  source_session: SourceSession;
+  track_id: TrackId;
+  kind: Kind;
+  confidence: Confidence;
+  distance_to_stop: DistanceToStop;
+  observed_at: ObservedAt1;
 }

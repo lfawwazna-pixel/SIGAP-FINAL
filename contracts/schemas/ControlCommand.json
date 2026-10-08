@@ -1,5 +1,73 @@
 {
   "$defs": {
+    "EmergencyTarget": {
+      "additionalProperties": false,
+      "properties": {
+        "event_id": {
+          "maxLength": 160,
+          "minLength": 1,
+          "title": "Event Id",
+          "type": "string"
+        },
+        "direction": {
+          "enum": [
+            "U",
+            "T",
+            "S",
+            "B"
+          ],
+          "title": "Direction",
+          "type": "string"
+        },
+        "source_session": {
+          "format": "uuid",
+          "title": "Source Session",
+          "type": "string"
+        },
+        "track_id": {
+          "minimum": 1,
+          "title": "Track Id",
+          "type": "integer"
+        },
+        "kind": {
+          "enum": [
+            "ambulance",
+            "fire_truck"
+          ],
+          "title": "Kind",
+          "type": "string"
+        },
+        "confidence": {
+          "maximum": 1,
+          "minimum": 0,
+          "title": "Confidence",
+          "type": "number"
+        },
+        "distance_to_stop": {
+          "maximum": 1,
+          "minimum": 0,
+          "title": "Distance To Stop",
+          "type": "number"
+        },
+        "observed_at": {
+          "format": "date-time",
+          "title": "Observed At",
+          "type": "string"
+        }
+      },
+      "required": [
+        "event_id",
+        "direction",
+        "source_session",
+        "track_id",
+        "kind",
+        "confidence",
+        "distance_to_stop",
+        "observed_at"
+      ],
+      "title": "EmergencyTarget",
+      "type": "object"
+    },
     "Observation": {
       "additionalProperties": false,
       "properties": {
@@ -44,7 +112,8 @@
         "activate",
         "heartbeat",
         "plan",
-        "release"
+        "release",
+        "priority"
       ],
       "title": "Action",
       "type": "string"
@@ -181,6 +250,17 @@
       ],
       "default": null,
       "title": "Plan Valid Until"
+    },
+    "priority_target": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/EmergencyTarget"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
     }
   },
   "required": [

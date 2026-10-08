@@ -34,6 +34,7 @@ class VideoChannel:
         self.task = self.process = None
         self.vision = vision
         self.tracking_task = None
+        self.tracking_observer = None
         self.tracked_frame = None
         self.tracked_raw = None
         self.tracked_id = 0
@@ -86,6 +87,8 @@ class VideoChannel:
             # Exclude the initial model warmup from the displayed throughput.
             self.processing_times.append(result['processing_ms'])
         self.tracking_times.append(time.monotonic())
+        if self.tracking_observer:
+            self.tracking_observer()
 
     def persist(self):
         self.directory.mkdir(parents=True, exist_ok=True)
@@ -198,6 +201,10 @@ class VideoChannel:
 
 
 class VideoHub:
+    def set_tracking_observer(self, callback):
+        for channel in self.channels.values():
+            channel.tracking_observer = callback
+
     def __init__(self, settings):
         directory = Path(settings.sigap_media_dir).resolve()
         self.vision = VisionWorker(settings)

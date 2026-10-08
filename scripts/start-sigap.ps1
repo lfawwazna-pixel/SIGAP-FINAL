@@ -1,8 +1,15 @@
+param([string]$ModelPath = '')
 $ErrorActionPreference = 'Stop'
 $sigapProject = Split-Path -Parent $PSScriptRoot
 $sigapPython = Join-Path $sigapProject '.venv\Scripts\python.exe'
 $sigapVision = Join-Path $sigapProject 'work\vision-env\Scripts\python.exe'
-$sigapModel = Join-Path $sigapProject 'models\sigap_yolo26s_stage6_v3_pilot_20261006\best.pt'
+$sigapEnvFile = Join-Path $sigapProject '.env'
+if (!$ModelPath -and (Test-Path -LiteralPath $sigapEnvFile)) {
+    $sigapModelLine = Get-Content -LiteralPath $sigapEnvFile | Where-Object { $_ -match '^\s*SIGAP_YOLO_MODEL\s*=' } | Select-Object -Last 1
+    if ($sigapModelLine) { $ModelPath = ($sigapModelLine -split '=',2)[1].Trim().Trim('"').Trim("'") }
+}
+if (!$ModelPath) { $ModelPath = 'models\sigap_yolo26s_stage6_v3_pilot_20261006\best.pt' }
+$sigapModel = if ([IO.Path]::IsPathRooted($ModelPath)) { $ModelPath } else { Join-Path $sigapProject $ModelPath }
 $sigapVite = Join-Path $sigapProject 'frontend\node_modules\vite\bin\vite.js'
 $sigapLogs = Join-Path $sigapProject 'work\runtime'
 foreach ($sigapFile in @($sigapPython,$sigapVision,$sigapModel,$sigapVite,(Join-Path $sigapProject 'frontend\dist\index.html'))) {

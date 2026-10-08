@@ -177,3 +177,7 @@ Tes menerapkan migrasi, membandingkan ORM, membuat akun pengujian unik, menguji 
 - [Verifikasi 3/4](docs/verification-34.md)
 
 Tahap 5 dan pipeline tracking Tahap 6 tersedia; integrasi video ke keputusan adaptif telah disiapkan. Kalibrasi dan validasi pengukuran pada video utama diperlukan sebelum hasilnya dinyatakan akurat. Uji klip ambulans/pemadam, pemicu EVP dari video, integrasi perangkat lapangan, serta evaluasi eksperimen lengkap masih terpisah.
+
+## Prioritas kendaraan darurat dari video
+
+Versi EVP v6 menghubungkan hasil YOLO + ByteTrack ke permintaan prioritas ATCS, dengan verifikasi beberapa frame, target terkunci, transisi kuning/semua merah, serta pemulihan. Lihat [alur dan batas validasi](docs/evp-video-v6.md), [tahapan terbaru](docs/development-stages.md), dan [hasil pengujian](docs/evp-validation-v6.md). Model baru dipilih melalui SIGAP_YOLO_MODEL di .env; scripts/start-sigap.ps1 membaca pilihan tersebut.

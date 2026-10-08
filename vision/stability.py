@@ -6,6 +6,34 @@ def iou(a, b):
     union = (a[2]-a[0])*(a[3]-a[1])+(b[2]-b[0])*(b[3]-b[1])-overlap
     return overlap/union if union > 0 else 0
 
+def distinct_box_indices(boxes, classes, scores, names, overlap=.8):
+    """Suppress near-identical predictions without changing their class or confidence.
+
+    YOLO may emit a car and an emergency class for the same box. Keep the
+    strongest prediction before ByteTrack can assign two physical identities.
+    Different silhouettes and neighboring vehicles remain separate.
+    """
+    four_wheel = {'car', 'truck', 'bus', 'ambulance', 'fire_truck'}
+    kept = []
+    for index in sorted(range(len(boxes)), key=lambda i: (-float(scores[i]), i)):
+        name = names[int(classes[index])]
+        duplicate = False
+        for previous in kept:
+            other = names[int(classes[previous])]
+            compatible = name == other or (name in four_wheel and other in four_wheel)
+            a, b = boxes[index], boxes[previous]
+            aw, ah, bw, bh = a[2]-a[0], a[3]-a[1], b[2]-b[0], b[3]-b[1]
+            aligned = (min(aw,bw,ah,bh) > 0
+                and abs((a[0]+a[2])-(b[0]+b[2]))/2 <= .08*min(aw,bw)
+                and abs((a[1]+a[3])-(b[1]+b[3]))/2 <= .08*min(ah,bh)
+                and .8 <= aw/bw <= 1.25 and .8 <= ah/bh <= 1.25)
+            if compatible and aligned and iou(a, b) >= overlap:
+                duplicate = True
+                break
+        if not duplicate:
+            kept.append(index)
+    return sorted(kept)
+
 class TrackStabilizer:
     def __init__(self, hold_seconds=1.2):
         self.hold = hold_seconds

@@ -17,7 +17,8 @@
         "activate",
         "heartbeat",
         "plan",
-        "release"
+        "release",
+        "priority"
       ],
       "title": "Action",
       "type": "string"

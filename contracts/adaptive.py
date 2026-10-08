@@ -4,6 +4,7 @@ from uuid import UUID
 from pydantic import AwareDatetime, Field, model_validator
 from contracts.models import Contract, Direction
 from contracts.vehicles import VehicleView
+from contracts.emergency import EmergencyStatus
 
 
 class ApproachMeasurement(Contract):
@@ -83,3 +84,4 @@ class AdaptiveStatus(Contract):
     source_sessions: dict[Direction, UUID] = Field(default_factory=dict)
     issues: dict[Direction, str] = Field(default_factory=dict)
     map_vehicles: list[VehicleView] = Field(default_factory=list)
+    emergency: EmergencyStatus = Field(default_factory=EmergencyStatus)

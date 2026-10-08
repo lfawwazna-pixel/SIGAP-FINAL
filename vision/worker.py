@@ -8,7 +8,7 @@ from pathlib import Path
 import sys
 import time
 from types import SimpleNamespace
-from vision.stability import TrackStabilizer
+from vision.stability import TrackStabilizer, distinct_box_indices
 
 os.environ.setdefault('YOLO_AUTOINSTALL', 'false')
 os.environ.setdefault('YOLO_CONFIG_DIR', str(Path.cwd() / 'work' / 'yolo-settings'))
@@ -74,7 +74,9 @@ def main():
             with redirect_stdout(sys.stderr):
                 result = model.predict(frame, imgsz=640, conf=.1, device=device, verbose=False)[0]
                 predicted_at = time.perf_counter()
-                rows = tracker.update(result.boxes.cpu().numpy(), frame)
+                boxes = result.boxes.cpu().numpy()
+                keep = distinct_box_indices(boxes.xyxy, boxes.cls, boxes.conf, expected)
+                rows = tracker.update(boxes[keep], frame)
             tracked_at = time.perf_counter()
             state['counter'], state['last_frame'] = BaseTrack._count, request['frame_id']
             height, width = frame.shape[:2]
@@ -90,6 +92,8 @@ def main():
             objects = state['stable'].update(objects, request['frame_id']/request['fps'])
             for obj in objects:
                 track_id, name = obj['track_id'], obj['class_name']
+                if request.get('focus_evp') and name not in ('ambulance', 'fire_truck'):
+                    continue  # Keep background measurements; only EVP receives an overlay during priority.
                 x1,y1,x2,y2 = [v*s for v,s in zip(obj['bbox'], (width,height,width,height))]
                 color = ((37 * track_id + 80) % 180 + 60, (67 * track_id) % 180 + 60, (97 * track_id) % 180 + 60)
                 if name in ('ambulance', 'fire_truck'):

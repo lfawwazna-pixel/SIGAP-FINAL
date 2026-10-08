@@ -21,6 +21,7 @@ class Settings(BaseSettings):
     sigap_media_dir: str = str(PROJECT_ROOT / 'work' / 'media')
     sigap_camera_urls: dict[str, SecretStr] = {}
     sigap_yolo_enabled: bool = False
+    sigap_evp_enabled: bool = True
     sigap_yolo_model: str = str(PROJECT_ROOT / 'models' / 'sigap_yolo26s' / 'best.pt')
     sigap_vision_python: str = ''
     sigap_tomtom_api_key: SecretStr = SecretStr('')

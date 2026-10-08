@@ -2,7 +2,7 @@
 
 SIGAP — Sistem Pengaturan Fase Lampu Adaptif Berbasis CCTV dan Deteksi Kendaraan YOLO.
 
-Status dokumen: keputusan dasar proyek. Implementasi sudah mencakup fondasi 2A, pengendali fixed-time 2B, visualisasi simpang 2C, akun/UI operator 2D, serta kendaraan dan percobaan terpisah 2E/2F. Integrasi override/fallback SIGAP operasional dan AI masih perilaku tujuan.
+Status dokumen: keputusan dasar prototipe lokal. YOLO26s + ByteTrack, empat rekaman, kendali adaptif, fallback, dashboard dan arsip telah tersedia. Integrasi EVP video ditambahkan 8 Oktober 2026; bukti dan batas validasi ada pada docs/evp-video-v6.md. Semua lampu tetap simulasi; tidak terhubung perangkat ATCS lapangan.
 
 ## Lokasi dan batas representasi
 

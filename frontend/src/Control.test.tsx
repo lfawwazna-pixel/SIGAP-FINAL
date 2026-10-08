@@ -24,7 +24,7 @@ const release = () => screen.getByRole('button', { name: 'Kembalikan ke ATCS' })
 
 beforeEach(() => {
   vi.useFakeTimers()
-  status = { intersection_id: config.intersection_id, atcs_run_id: runId, observed_at: new Date().toISOString(),
+  status = { emergency:null, emergency_serving:false, intersection_id: config.intersection_id, atcs_run_id: runId, observed_at: new Date().toISOString(),
     available: true, configured: true, allow_test_source: false, state: 'fixed_time', controller: 'ATCS', revision: 3,
     sender_id: secondRunId, source: 'cctv', ready: true, readiness_reason: 'Empat pendekat siap.', activation_required: true,
     session_id: null, heartbeat_remaining_seconds: null, data_remaining_seconds: 3, pending_request_id: null,
