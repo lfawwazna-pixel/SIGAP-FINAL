@@ -61,9 +61,12 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.state.model_quality = ModelQualityReader(settings.sigap_yolo_model)
     app.state.video = VideoHub(settings)
     app.state.adaptive.video = app.state.video
-    app.state.video.set_tracking_observer(app.state.adaptive.observe_emergency_frame)
     app.include_router(video_router)
     app.state.analytics = AnalyticsService(settings, config)
+    def observe_tracking():
+        app.state.adaptive.observe_emergency_frame()
+        app.state.analytics.observe_video(app.state.video)
+    app.state.video.set_tracking_observer(observe_tracking)
     app.include_router(analytics_router)
 
     @app.middleware("http")

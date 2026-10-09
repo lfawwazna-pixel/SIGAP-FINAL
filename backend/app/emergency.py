@@ -22,9 +22,21 @@ class EmergencyCoordinator:
         self.events.append(message)
         self.message = message
 
+    def suspend(self):
+        """Inactive control cannot retain candidates or confirmation evidence."""
+        self.records.clear()
+        self.completed.clear()
+        self.events.clear()
+        self.candidates = []
+        self.target = self.started = None
+        self.state, self.message = 'idle', 'Prioritas EVP menunggu kendali SIGAP aktif.'
+        return self.snapshot()
+
     def update(self, hub, now=None, at=None, control_active=True):
         now = time.monotonic() if now is None else now
         at = datetime.now(timezone.utc) if at is None else at
+        if not control_active:
+            return self.suspend()
         if not self.enabled or hub is None:
             self.state = 'unavailable'
             self.target = None
@@ -41,7 +53,7 @@ class EmergencyCoordinator:
             available = True
             cal = channel.calibration
             stamp = at-timedelta(seconds=max(0, now-channel.tracked_at))
-            for track in channel.tracks:
+            for track in channel.all_tracks:
                 key = f'{direction}:{channel.session}:{channel.tracker_session}:{track.track_id}'
                 if key in self.completed:
                     continue
@@ -89,9 +101,7 @@ class EmergencyCoordinator:
         self.records = {k:v for k,v in self.records.items() if now-v['last'] <= self.loss_seconds}
         # A session reset, dropped source or sustained loss cannot keep an old override alive.
         if self.target:
-            if not control_active:
-                self.started = None
-            elif self.started is None:
+            if self.started is None:
                 self.started = now
             record = self.records.get(self.target.event_id)
             if not record or self.started is not None and now-self.started >= self.maximum_seconds:
@@ -107,7 +117,7 @@ class EmergencyCoordinator:
         self.candidates = eligible[:32]
         # Lock one target until completion; a fluctuating ranking cannot alternate lamp requests.
         if self.target is None and eligible and self.state != 'recovering':
-            self.target, self.started, self.state = eligible[0], now if control_active else None, 'confirmed'
+            self.target, self.started, self.state = eligible[0], now, 'confirmed'
             self.log(f'EVP terkonfirmasi: {self.target.kind} {self.target.direction} #{self.target.track_id}. Adaptif antrean ditangguhkan.')
         elif self.target is None and self.state != 'recovering':
             self.state = 'confirming' if self.records else 'idle' if available else 'unavailable'

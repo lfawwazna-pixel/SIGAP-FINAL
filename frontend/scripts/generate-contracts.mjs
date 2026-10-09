@@ -25,14 +25,16 @@ for (const name of ['Health', 'AtcsStatus', 'IntersectionConfig', 'TrafficEvent'
     await writeFile(schemaCopy, rawSchema)
   }
 }
-const geometrySource = fileURLToPath(new URL('../../configs/map-geometry.json', import.meta.url))
 const geometryDirectory = fileURLToPath(new URL('../src/geometry/', import.meta.url))
-const geometryTarget = `${geometryDirectory}/map-geometry.json`
-const geometry = await readFile(geometrySource, 'utf8')
-if (process.argv.includes('--check')) {
-  if (normalizeNewlines(await readFile(geometryTarget, 'utf8')) !== normalizeNewlines(geometry)) throw new Error('Geometri peta frontend belum sinkron.')
-} else {
-  await mkdir(geometryDirectory, { recursive: true })
-  await writeFile(geometryTarget, geometry)
+for (const name of ['map-geometry.json', 'vehicle-dimensions.json']) {
+  const geometrySource = fileURLToPath(new URL(`../../configs/${name}`, import.meta.url))
+  const geometryTarget = `${geometryDirectory}/${name}`
+  const geometry = await readFile(geometrySource, 'utf8')
+  if (process.argv.includes('--check')) {
+    if (normalizeNewlines(await readFile(geometryTarget, 'utf8')) !== normalizeNewlines(geometry)) throw new Error(`Geometri frontend belum sinkron: ${name}`)
+  } else {
+    await mkdir(geometryDirectory, { recursive: true })
+    await writeFile(geometryTarget, geometry)
+  }
 }
 console.log('Tipe frontend dan geometri peta sinkron dengan sumber proyek.')

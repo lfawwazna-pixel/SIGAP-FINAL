@@ -16,6 +16,7 @@ from backend.app.mutations import require_mutation
 from contracts.models import Direction
 from contracts.video import VideoCommand, VideoStatus, VideoChannelView, VideoCalibration, TrackingView
 from backend.app.vision import VisionWorker
+from contracts.zones import zone_tracks
 
 
 class VideoChannel:
@@ -58,6 +59,19 @@ class VideoChannel:
             except (ValueError, KeyError, OSError):
                 pass
 
+    @property
+    def tracks(self):
+        return zone_tracks(self._tracks, self.calibration)
+
+    @property
+    def all_tracks(self):
+        # Internal evidence is retained for the existing stop-line clearance check.
+        return self._tracks
+
+    @tracks.setter
+    def tracks(self, value):
+        self._tracks = value
+
     def reset_tracking(self):
         self.tracked_frame = None
         self.tracked_raw = None
@@ -74,7 +88,7 @@ class VideoChannel:
             if self.session != session or self.tracker_session != generation or self.state != 'playing' or self.frame is None:
                 return None
             return self.frame_id, self.frame, self.received, self.position
-        result = await self.vision.infer(self.direction, generation, frame_id, jpeg, captured, latest=latest)
+        result = await self.vision.infer(self.direction, generation, frame_id, jpeg, captured, latest=latest, calibration=self.calibration.model_dump(mode='json') if self.calibration else None)
         if result is None or self.session != session or self.tracker_session != generation or self.state != 'playing':
             return
         self.tracked_frame, self.tracked_id = result['jpeg'], result.get('input_frame_id', frame_id)
@@ -82,7 +96,7 @@ class VideoChannel:
         captured = result.get('input_captured', captured)
         position = result.get('input_position', position)
         self.tracked_session, self.tracked_at, self.tracked_position = session, captured, position
-        self.tracks, self.device = result['tracks'], result['device']
+        self.tracks, self.device = result.get('all_tracks', result['tracks']), result['device']
         if self.tracking_times:
             # Exclude the initial model warmup from the displayed throughput.
             self.processing_times.append(result['processing_ms'])
@@ -313,6 +327,8 @@ async def command(direction: Direction, payload: VideoCommand, request: Request)
             if channel.source == 'none':
                 raise error(409, 'NO_SOURCE', 'Pilih sumber video dahulu.')
             channel.calibration = payload.calibration
+            channel.tracker_session = uuid4()
+            channel.reset_tracking()
             channel.persist()
         else:
             if payload.action == 'use_live':

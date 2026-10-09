@@ -5,6 +5,7 @@ import { directions, directionNames, phaseNames, type Direction } from './traffi
 import type { TrafficView } from './types/TrafficView'
 import { MapZoom } from './MapZoom'
 import { DecisionTable } from './AdaptivePanel'
+import { VehicleLegend } from './VehicleGlyph'
 
 export function TrafficMetrics({ data }: { data: TrafficView }) {
   return <div className="traffic-metrics" aria-label="Statistik kendaraan sintetis">
@@ -35,7 +36,7 @@ export function SimulationWorkspace({ intersection, csrf, active }: { intersecti
   }
   if (!active) return null
   return <section className="experiment-workspace" aria-label="Ruang simulasi terpisah">
-    <div className="experiment-heading"><div><p className="eyebrow">RUANG PERCOBAAN</p><h2>Simulasi arus dan prioritas darurat</h2><p>Semua kendaraan di sini sintetis. ATCS utama terus berjalan dengan jamnya sendiri.</p></div><span className="experiment-state">{data ? data.running ? 'Berjalan' : 'Dijeda' : 'Menghubungkan'} · {data ? `${data.time_seconds.toFixed(1)} dtk` : '—'}</span></div>
+    <div className="experiment-heading"><div><p className="eyebrow">RUANG PERCOBAAN</p><h2>Simulasi arus dan prioritas darurat</h2><p>Motor, mobil, bus, dan truk muncul otomatis secara acak. Motor dan mobil lebih sering; ambulans dan pemadam ditambahkan lewat tombol manual. Semua kendaraan di sini sintetis.</p></div><span className="experiment-state">{data ? data.running ? 'Berjalan' : 'Dijeda' : 'Menghubungkan'} · {data ? `${data.time_seconds.toFixed(1)} dtk` : '—'}</span></div>
     {feed.error && <p role="alert" className="connection-note">{feed.error}</p>}
     <div className="experiment-controls">
       <button className="primary-control" disabled={!data || feed.pending} onClick={() => void send({ action: data?.running ? 'pause' : 'start' }, data?.running ? 'Percobaan dijeda.' : 'Percobaan berjalan.')}>{data?.running ? 'Jeda' : 'Mulai'}</button>
@@ -49,6 +50,8 @@ export function SimulationWorkspace({ intersection, csrf, active }: { intersecti
     <div className="operator-workspace">
       <section className="map-panel"><div className="section-toolbar"><div><h3>Persimpangan percobaan</h3><p>Jarak ditulis dalam unit skema, bukan meter lapangan.</p></div><span className={`phase-tag phase-tag--${data?.phase ?? 'unknown'}`}>{data?.phase ? `${phaseNames[data.phase]}${data.active_approach ? ` · ${data.active_approach}` : ''}` : 'Belum diketahui'}</span></div>
         <div className="experiment-map-scroll"><div style={{ width: `${zoom*100}%` }}><IntersectionMap selected={selected} onSelect={setSelected} signals={data?.signals ?? null} routes={false} vehicles={data?.vehicles ?? []} markerId="experiment-route" vehicleRunId={data?.run_id} /></div></div>
+        <VehicleLegend label="Kendaraan simulasi" />
+        <p className="map-rule">Bus dan truk sepanjang dua mobil dan membutuhkan ruang antrean lebih panjang. Hingga tiga motor dapat berbagi lebar satu lajur, dengan jarak aman di depan dan samping. Waktu kedatangan, arah asal, dan tujuan belok diacak; gerak mengikuti lajur dan lampu. ATCS utama tetap berjalan dengan jamnya sendiri.</p>
         {data && <TrafficMetrics data={data} />}
       </section>
       <aside className="operations-panel experiment-operations">

@@ -166,25 +166,40 @@ def test_full_sender_pipeline_focus_priority_and_recovery(clock,monkeypatch,tmp_
     settings=Settings(_env_file=None,sigap_yolo_enabled=True,sigap_adaptive_video=True,
         sigap_control_api_key=SecretStr('test-only-key-'*4))
     sender=AdaptiveSender(settings,load_config().intersection_id);sender.video=hub
+    actions=[]
     def transport(request):
         if request.url.path=='/control':value=rig.control.snapshot(clock.monotonic(),clock.utcnow())
         elif request.url.path=='/status':value=rig.engine.snapshot(clock.utcnow())
-        else:value=rig.submit(ControlCommand.model_validate_json(request.content))
+        else:
+            command=ControlCommand.model_validate_json(request.content)
+            actions.append(command.action)
+            value=rig.submit(command)
         return httpx.Response(200,json=value.model_dump(mode='json'))
     async def run():
         async with httpx.AsyncClient(transport=httpx.MockTransport(transport),base_url='http://atcs') as client:
             sender.client=client
             await sender.cycle();rig.sender=sender.sender
-            assert rig.send('activate').outcome=='accepted'
-            sender.auto_resume=True
             async def step(emergency=True):
                 clock.advance(.4)
                 for direction,c in hub.channels.items():
                     c.tracked_id+=1;c.tracked_at=c.received=clock.monotonic()
                     c.tracks=[TrackedVehicle(track_id=7,class_name='ambulance' if direction=='T' and emergency else 'car',confidence=.9,bbox=[.4,.2,.5,.4])]
+                    sender.observe_emergency_frame()
                 rig.engine.tick(now=clock.monotonic(),at=clock.utcnow(),conflict=rig.conflict())
                 await sender.cycle()
-            for _ in range(55):await step()
+            for _ in range(8):await step()
+            assert sender.emergency.target is None and not hub.vision.focus
+            assert not sender.snapshot().emergency.events and 'priority' not in actions
+            assert rig.control.emergency is None and rig.control.state=='fixed_time'
+            assert rig.send('activate').outcome=='accepted'
+            sender.auto_resume=True
+            async def serve():
+                for _ in range(120):
+                    await step()
+                    if rig.control.snapshot(clock.monotonic(),clock.utcnow()).emergency_serving:
+                        return
+                pytest.fail('Confirmed EVP was not served through the safe transition')
+            await serve()
             assert rig.control.emergency is not None
             assert rig.control.snapshot(clock.monotonic(),clock.utcnow()).emergency_serving
             assert hub.vision.focus
@@ -197,7 +212,64 @@ def test_full_sender_pipeline_focus_priority_and_recovery(clock,monkeypatch,tmp_
             assert rig.control.emergency is None and not hub.vision.focus
             assert sender.snapshot().emergency.target is None
             assert rig.control.state=='adaptive'
+            # A new confirmed emergency can run, but operator release fences it
+            # immediately while the ATCS engine completes the physical clearance.
+            await serve()
+            assert rig.control.snapshot(clock.monotonic(),clock.utcnow()).emergency_serving
+            run_id=rig.engine.run_id
+            await sender.hold()
+            priority_count=actions.count('priority')
+            assert rig.control.state=='returning_atcs' and rig.control.emergency is None
+            assert sender.snapshot().emergency.target is None and not hub.vision.focus
+            for _ in range(60):await step()
+            assert rig.control.state=='fixed_time' and rig.engine.run_id==run_id
+            assert actions.count('priority')==priority_count
+            assert not sender.emergency.records and not sender.emergency.candidates
     asyncio.run(run())
+
+
+def test_priority_waits_for_actual_acquisition_and_release_clears_through_safe_transition(clock):
+    rig=Rig(clock)
+    rig.send('observe',source='cctv')
+    outside=rig.command('priority',session_id=uuid4(),sequence=1,priority_target=target(rig))
+    assert rig.submit(outside).code=='SESSION_REVOKED'
+    rig.advance(2,data=False,heartbeat=False)
+    rig.send('observe',source='cctv')
+    assert rig.send('activate').outcome=='accepted'
+    assert rig.control.state=='activating'
+    assert priority(rig,target(rig)).code=='EVP_CONTROL_INACTIVE'
+    assert rig.control.emergency is None
+    rig.send('plan',approach='U')
+    # Keep measurements fresh through acquisition; no emergency is queued yet.
+    for _ in range(16):
+        rig.clock.advance(1);rig.send('observe',source='cctv');rig.send('heartbeat')
+        rig.engine.tick(now=clock.monotonic(),at=clock.utcnow(),conflict=rig.conflict())
+    assert rig.control.state=='adaptive'
+    value=target(rig)
+    assert priority(rig,value).outcome!='rejected'
+    for _ in range(20):
+        value=fresh(rig,value)
+        if rig.control.snapshot(clock.monotonic(),clock.utcnow()).emergency_serving:break
+    assert rig.control.snapshot(clock.monotonic(),clock.utcnow()).emergency_serving
+    phase,approach,run_id=rig.engine.phase,rig.engine.active_approach,rig.engine.run_id
+    old_session=rig.control.session
+    assert rig.send('release').outcome=='accepted'
+    assert rig.control.state=='returning_atcs' and rig.control.emergency is None
+    assert (rig.engine.phase,rig.engine.active_approach)==(phase,approach)
+    rig.advance(9)
+    assert rig.engine.phase=='green'
+    rig.advance(1)
+    assert rig.engine.phase=='yellow'
+    rig.advance(3)
+    assert rig.engine.phase=='all_red'
+    rig.advance(2,conflict='occupied')
+    assert rig.control.state=='returning_atcs' and rig.engine.phase=='all_red'
+    rig.advance(1,conflict='unknown')
+    assert rig.control.state=='returning_atcs'
+    rig.advance(1)
+    assert rig.control.state=='fixed_time' and rig.engine.run_id==run_id
+    stale=rig.command('priority',session_id=old_session,sequence=999,priority_target=target(rig))
+    assert rig.submit(stale).code=='SESSION_REVOKED'
 
 
 def test_confirmation_requires_consistent_kind_and_locked_target_expires_on_class_flip(clock,monkeypatch,tmp_path):
@@ -224,14 +296,17 @@ def test_second_camera_target_waits_for_acknowledged_recovery(clock,monkeypatch,
     assert sample(hub,co,clock,d='T',ident=12).target.direction=='T'
 
 
-def test_unowned_detection_does_not_consume_service_budget_and_lost_target_can_be_reverified(clock,monkeypatch,tmp_path):
+def test_inactive_detection_needs_new_confirmation_and_lost_target_can_be_reverified(clock,monkeypatch,tmp_path):
     hub=fresh_video_hub(clock,monkeypatch,tmp_path);co=EmergencyCoordinator(maximum_seconds=1)
     for _ in range(8):
         c=hub.channels['U'];clock.advance(.4);c.tracked_id+=1;c.tracked_at=c.received=clock.monotonic()
         c.tracks=[TrackedVehicle(track_id=7,class_name='ambulance',confidence=.9,bbox=[.4,.2,.5,.4])]
         co.update(hub,clock.monotonic(),clock.utcnow(),control_active=False)
-    assert co.target and co.started is None
-    co.update(hub,clock.monotonic(),clock.utcnow(),control_active=True)
+    assert co.target is None and co.started is None
+    assert not co.records and not co.candidates and not co.events
+    assert sample(hub,co,clock).target is None
+    assert sample(hub,co,clock).target is None
+    assert sample(hub,co,clock).target is not None
     assert co.started==clock.monotonic()
     co2=EmergencyCoordinator()
     for _ in range(3):sample(hub,co2,clock)

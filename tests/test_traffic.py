@@ -1,7 +1,7 @@
 import math
 from itertools import combinations
 import pytest
-from atcs_simulator.app.traffic import DIRECTIONS, ROUTES, TrafficWorld, VEHICLE_LENGTH, GAP
+from atcs_simulator.app.traffic import DIRECTIONS, ROUTES, TrafficWorld, VEHICLE_LENGTH, GAP, bodies_overlap
 from atcs_simulator.app.experiment import Experiment
 from contracts.configuration import load_config
 from contracts.traffic import TrafficView
@@ -226,7 +226,7 @@ def test_seed_replay_and_mixed_flow_has_spacing_and_progress():
         b.tick(.05)
         if i % 20 == 0:
             for one, two in combinations(a.world.vehicles, 2):
-                assert math.dist(one.position()[:2], two.position()[:2]) >= VEHICLE_LENGTH+GAP-0.001
+                assert not bodies_overlap(one, one.position(), two, two.position(), safety=False)
             assert a.world.snapshot() == b.world.snapshot()
         if (i+1) % 600 == 0:
             completed.append(a.world.completed)

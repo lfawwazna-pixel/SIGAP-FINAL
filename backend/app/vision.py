@@ -37,7 +37,7 @@ class VisionWorker:
                 await process.communicate()
             await process.wait()
 
-    async def infer(self, direction, session, frame_id, jpeg, captured=None, latest=None):
+    async def infer(self, direction, session, frame_id, jpeg, captured=None, latest=None, calibration=None):
         if not self.enabled or time.monotonic() < self.retry_after:
             return None
         async with self.lock:
@@ -61,7 +61,7 @@ class VisionWorker:
                             str(self.model), cwd=PROJECT_ROOT, stdin=asyncio.subprocess.PIPE,
                             stdout=asyncio.subprocess.PIPE, stderr=log, limit=4_000_000, **flags)
                 payload = dict(direction=direction, session=str(session), frame_id=frame_id, fps=self.fps,
-                    jpeg=base64.b64encode(jpeg).decode('ascii'), focus_evp=self.focus)
+                    jpeg=base64.b64encode(jpeg).decode('ascii'), focus_evp=self.focus, calibration=calibration)
                 self.process.stdin.write((json.dumps(payload) + '\n').encode())
                 await self.process.stdin.drain()
                 # Cold model startup can take longer than subsequent inference.
@@ -70,6 +70,7 @@ class VisionWorker:
                 if result.get('error') or (result.get('direction'), result.get('session'), result.get('frame_id')) != (direction, str(session), frame_id):
                     raise ValueError('Identitas hasil tracking tidak cocok.')
                 result['tracks'] = [TrackedVehicle.model_validate(t) for t in result['tracks']]
+                result['all_tracks'] = [TrackedVehicle.model_validate(t) for t in result.get('all_tracks', result['tracks'])]
                 result['jpeg'] = base64.b64decode(result['jpeg'], validate=True)
                 if not result['jpeg'].startswith(b'\xff\xd8'):
                     raise ValueError('Hasil frame tidak valid.')

@@ -9,7 +9,7 @@ class Experiment:
     def __init__(self, config, seed=42):
         self.config = config
         self.seed = seed
-        self.world = TrafficWorld(seed)
+        self.world = TrafficWorld(seed, mixed_traffic=True)
         self.run_id = str(uuid4())
         self.running = False
         self.speed = 1

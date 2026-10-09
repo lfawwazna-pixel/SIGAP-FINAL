@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { IntersectionMap } from './IntersectionMap'
+import { VehicleLegend } from './VehicleGlyph'
 import { Readiness } from './Readiness'
 import { coherentStatus, directions, directionNames, eventNames, localTime, modeNames, phaseNames, signalNames, supportedGeometry, type Direction } from './traffic'
 import { useJournal, useMonitor, useReadiness, type Connection } from './useMonitor'
@@ -41,10 +42,14 @@ export function Monitor({ session, onLogout, signingOut, logoutError }: {
   const mayControl = session.operator.permissions.includes('control:operate')
   const adaptive = useAdaptive(Boolean(config))
   const control = useControl(config?.intersection_id, session.csrf_token, mayControl, adaptive.data?.enabled === true)
-  const videoControl = verified?.controller === 'SIGAP' && (control.status?.source === 'cctv'
-    || adaptive.data?.source === 'recording' || adaptive.data?.source === 'cctv')
   const videoData = useVideoMapData(adaptive.data, config?.intersection_id)
-  const videoMap = Boolean(videoData) || videoControl || (workspace === 'sigap' && adaptive.data?.source !== 'synthetic')
+  const videoSource = control.status?.source === 'cctv' || Boolean(videoData)
+    || adaptive.data?.source === 'recording' || adaptive.data?.source === 'cctv'
+  // Only the verified phase controller changes the ATCS map's source. Keep
+  // tracking through release clearance; fixed_time confirms release completion.
+  const videoControl = Boolean(videoSource && verified
+    && (verified.controller === 'SIGAP' || verified.mode === 'fallback'))
+  const videoMap = videoControl || (workspace === 'sigap' && adaptive.data?.source !== 'synthetic')
   // Fetch synthetic poses only while they are actually displayed. The independent
   // ATCS status feed keeps checking the real controller in every workspace.
   const needsTraffic = workspace !== 'simulation' && !videoMap
@@ -87,18 +92,20 @@ export function Monitor({ session, onLogout, signingOut, logoutError }: {
         </div>
       </div>
       <div className="workspace-switch" role="group" aria-label="Mode ruang kerja">
-        <button aria-pressed={workspace === 'atcs'} onClick={() => setWorkspace('atcs')}><strong>ATCS</strong><span>Fase bersama · video asli</span></button>
+        <button aria-pressed={workspace === 'atcs'} onClick={() => setWorkspace('atcs')}><strong>ATCS</strong><span>Fase bersama · peta kendaraan</span></button>
         <button aria-pressed={workspace === 'sigap'} onClick={() => setWorkspace('sigap')}><strong>SIGAP</strong><span>Adaptif, sumber &amp; kendali</span></button>
         <button aria-pressed={workspace === 'simulation'} onClick={() => setWorkspace('simulation')}><strong>Simulasi</strong><span>Percobaan arus &amp; EVP</span></button>
       </div>
-      <div className="background-atcs" role="status"><span className="signal-dot" /><strong>{live?.controller === 'SIGAP' ? 'SIGAP mengambil alih kendali · ATCS mengikuti fase adaptif' : control.status?.state === 'activating' ? 'SIGAP menunggu transisi aman' : control.status?.state === 'returning_atcs' ? 'Fallback · kembali ke ATCS' : 'ATCS mengendalikan · waktu tetap'}</strong> · {live?.phase ? `${phaseNames[live.phase]} ${live.active_approach ?? ''} · ${live.remaining_seconds != null ? `${Math.ceil(live.remaining_seconds)} dtk` : 'menunggu konflik'}` : 'status belum terverifikasi'}</div>
+      <div className="background-atcs" role="status"><span className="signal-dot" /><strong>{live?.mode === 'fallback' ? 'Transisi aman · kembali ke ATCS' : live?.controller === 'SIGAP' ? 'SIGAP mengambil alih kendali · ATCS mengikuti fase adaptif' : control.status?.state === 'activating' ? 'SIGAP menunggu transisi aman' : control.status?.state === 'returning_atcs' ? 'Fallback · kembali ke ATCS' : 'ATCS mengendalikan · waktu tetap'}</strong> · {live?.phase ? `${phaseNames[live.phase]} ${live.active_approach ?? ''} · ${live.remaining_seconds != null ? `${Math.ceil(live.remaining_seconds)} dtk` : 'menunggu konflik'}` : 'status belum terverifikasi'}</div>
       {control.status?.fallback_code && <p className="connection-note" role="status"><strong>{control.status.state === 'returning_atcs' ? 'Transisi ke ATCS.' : 'Catatan pengendali.'}</strong> {control.status.reason}</p>}
       {workspace === 'sigap' && <><ControlPanel control={control} mayControl={mayControl} allowSynthetic={adaptive.data?.source === 'synthetic' && adaptive.data.enabled} autoResume={adaptive.data?.auto_resume} /><AdaptivePanel feed={adaptive} csrf={session.csrf_token} mayControl={mayControl} /></>}
-      <EmergencyPanel emergency={adaptive.data?.emergency} control={control.status} />
+      {workspace !== 'simulation' && live?.controller === 'SIGAP' && live.mode === 'adaptive'
+        && control.status?.atcs_run_id === live.run_id
+        && <EmergencyPanel emergency={adaptive.data?.emergency} control={control.status} />}
       <VideoPanel workspace={workspace} csrf={session.csrf_token} mayControl={mayControl} />
       <SimulationWorkspace intersection={config?.intersection_id} csrf={session.csrf_token} active={workspace === 'simulation'} />
       <div hidden={workspace === 'simulation'}>
-      <div className="simulation-strip"><span className="simulation-mark" aria-hidden="true">{videoMap ? 'V' : 'A'}</span><span><strong>{live?.mode ? `${live.controller} · ${modeNames[live.mode]}` : 'Pengendali ATCS'}</strong> · {videoMap ? 'Satu ikon per kendaraan terlacak, sesuai pendekat kamera. Ikon disusun per lajur; posisi dan geraknya tidak sama persis dengan video.' : 'Kendaraan ilustrasi sintetis.'} Belum terhubung ke lampu lapangan.</span><span className="read-only">{videoMap ? 'Tracking aktif' : '1× · Terus berjalan'}</span></div>
+      <div className="simulation-strip"><span className="simulation-mark" aria-hidden="true">{videoMap ? 'V' : 'A'}</span><span><strong>{live?.mode ? `${live.controller} · ${modeNames[live.mode]}` : 'Pengendali ATCS'}</strong> · {videoMap ? 'Satu ikon per kendaraan dalam zona, sesuai pendekat kamera. Ikon disusun per lajur; posisi dan geraknya tidak sama persis dengan video.' : 'Kendaraan ilustrasi acak bergerak mengikuti lampu ATCS.'} Belum terhubung ke lampu lapangan.</span><span className="read-only">{videoMap ? (videoControl ? 'Tracking aktif' : 'Pratinjau tracking') : '1× · Terus berjalan'}</span></div>
       {connection !== 'live' && <div className={`connection-note${connection === 'loading' ? ' is-loading' : ''}`}>
         <strong>{connectionLabels[connection]}.</strong> {connection === 'loading' ? 'Menunggu kondisi pengendali.'
           : connection === 'paused' ? 'Data lampu akan diperiksa kembali saat halaman aktif.'
@@ -114,8 +121,9 @@ export function Monitor({ session, onLogout, signingOut, logoutError }: {
               : <div className="map-empty"><span aria-hidden="true">＋</span><h3>{snapshot.configuration.state === 'loading' ? 'Menyiapkan peta simpang' : 'Peta belum dapat ditampilkan'}</h3><p>Geometri dan arah dibaca dari konfigurasi simpang.</p></div>}
           </div>
           <div className="map-legend"><span><i className="legend-route" />Ruas pintas kiri</span><span><i className="legend-dashed" />Rute pendekat terpilih</span><span><i className="legend-yield" />Beri jalan saat bergabung</span></div>
+          {videoMap && <VehicleLegend />}
           <p className="map-rule">Ruas pintas kiri melewati sisi luar pulau jalan. <strong>Arus lurus dan kanan tetap mengikuti lampu.</strong></p>
-          {videoMap ? <><p className="map-rule" role="status">{vehicles.length} kendaraan terlacak ditampilkan di peta. Jumlah per pendekat mengikuti tracking terbaru. Ikon diperkecil jika lajur padat; gunakan zoom untuk memeriksa. Kebutuhan lampu hanya menghitung area terkalibrasi.</p>{videoData?.measurements ? <div className="table-scroll"><table className="event-table video-map-table" aria-label="Jumlah kendaraan video dan peta"><thead><tr><th>Pendekat</th><th>Terlacak / di peta</th><th>Untuk lampu</th><th>Antrean</th><th>Tunggu terlama</th></tr></thead><tbody>{directions.map(d => { const v = videoData.measurements!.approaches[d]; const usable = v.usable && freshVideoObservation(v.observed_at); return <tr key={d}><th>{directionNames[d]}</th><td>{vehicles.filter(vehicle => vehicle.origin === d).length}</td><td>{usable ? v.controlled_count : '—'}</td><td>{usable ? v.queue_count : '—'}</td><td>{usable ? `${v.oldest_wait_seconds.toFixed(1)} dtk` : '—'}</td></tr> })}</tbody></table></div> : <p className="map-rule">Menunggu hasil tracking mutakhir. Video dan kalibrasi dapat diperiksa di panel CCTV.</p>}</> : live && traffic.data?.run_id === live.run_id ? <TrafficMetrics data={traffic.data} /> : <p className="map-rule">Posisi kendaraan belum tersedia atau tidak mutakhir.</p>}
+          {videoMap ? <><p className="map-rule" role="status">{vehicles.length} kendaraan dalam zona ditampilkan di peta. Jumlah per pendekat mengikuti tracking dalam zona tersimpan. Motor disusun hingga tiga per baris; bus dan truk sepanjang dua mobil. Ruas memanjang bila diperlukan; geser peta atau gunakan zoom untuk memeriksa. Kebutuhan lampu hanya menghitung area terkalibrasi.</p>{videoData?.measurements ? <div className="table-scroll"><table className="event-table video-map-table" aria-label="Jumlah kendaraan video dan peta"><thead><tr><th>Pendekat</th><th>Dalam zona / di peta</th><th>Untuk lampu</th><th>Antrean</th><th>Tunggu terlama</th></tr></thead><tbody>{directions.map(d => { const v = videoData.measurements!.approaches[d]; const usable = v.usable && freshVideoObservation(v.observed_at); return <tr key={d}><th>{directionNames[d]}</th><td>{vehicles.filter(vehicle => vehicle.origin === d).length}</td><td>{usable ? v.controlled_count : '—'}</td><td>{usable ? v.queue_count : '—'}</td><td>{usable ? `${v.oldest_wait_seconds.toFixed(1)} dtk` : '—'}</td></tr> })}</tbody></table></div> : <p className="map-rule">Menunggu hasil tracking mutakhir. Video dan kalibrasi dapat diperiksa di panel CCTV.</p>}</> : live && traffic.data?.run_id === live.run_id ? <TrafficMetrics data={traffic.data} /> : <p className="map-rule">Posisi kendaraan belum tersedia atau tidak mutakhir.</p>}
         </section>
         <aside className="operations-panel" aria-label="Panel operasional">
           <div className="controller-heading"><span className="eyebrow">PENGENDALI AKTIF</span><div><strong>{live?.controller ?? '—'}</strong><span>{live?.mode ? modeNames[live.mode] : 'Belum terverifikasi'}</span></div></div>

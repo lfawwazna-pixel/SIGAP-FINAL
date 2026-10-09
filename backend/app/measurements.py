@@ -10,18 +10,11 @@ from uuid import uuid4
 from contracts.adaptive import MeasurementBatch
 from contracts.configuration import PROJECT_ROOT
 from contracts.vehicles import VehicleView
+from contracts.zones import inside, zone_tracks
 
 EPOCH = datetime(1970, 1, 1, tzinfo=timezone.utc)
 MAP_GEOMETRY = json.loads((PROJECT_ROOT / 'configs/map-geometry.json').read_text(encoding='utf-8'))
 MAP_BODY_LENGTH, MAP_CLEARANCE, MAP_PITCH = 26, 6, 36
-
-
-def inside(x, y, polygon):
-    crossing = False
-    for a, b in zip(polygon, polygon[1:] + polygon[:1]):
-        if (a.y > y) != (b.y > y) and x < (b.x-a.x)*(y-a.y)/(b.y-a.y)+a.x:
-            crossing = not crossing
-    return crossing
 
 
 def line_side(x, y, line):
@@ -50,11 +43,11 @@ def clipped_box_area(box, polygon):
 
 
 def map_poses(direction, generation, entries):
-    """Keep every track visible on its camera's approach, including outside the ROI.
+    """Keep one pose per accepted track inside the calibrated zones.
 
     Slots represent presence, not camera pixel coordinates or simulated motion.
     Keep IDs in a stable order; noisy boxes must not make vehicles overtake each
-    other. The renderer scales crowded lanes to their actual slot spacing.
+    other. The renderer reflows class-sized rows and extends crowded roads.
     """
     vehicles = []
     for lane in ('outer', 'middle', 'inner'):
@@ -75,7 +68,7 @@ def map_poses(direction, generation, entries):
             heading = (90+'UTSB'.index(direction)*90+180) % 360-180
             vehicles.append(VehicleView(id=identity, origin=direction,
                 movement=dict(outer='left', middle='straight', inner='right')[lane],
-                kind={'ambulance':'ambulance', 'fire_truck':'fire_engine'}.get(track.class_name, 'car'),
+                kind='fire_engine' if track.class_name == 'fire_truck' else track.class_name,
                 x=px, y=py, heading=heading, stopped=entry['stopped'], served=entry['passed'],
                 distance_to_stop=max(0, entry['distance']), lane=lane, target_lane=lane, changing_to=None,
                 stop_reason='stationary' if entry['stopped'] else None))
@@ -119,17 +112,6 @@ class VideoMeasurements:
                          oldest_wait_seconds=0, slip_count=0, exit_available=True)
             approaches[direction] = value
             if not view.detection_ready or view.state != 'playing':
-                previous = self.previous.get(direction)
-                # A loop boundary resets the tracker, not camera health. Bridge only the
-                # original, still-fresh observation; never refresh its timestamp.
-                if (view.state == 'playing' and channel.vision.enabled and previous
-                        and previous[0] == channel.session and previous[1] != channel.tracker_session
-                        and previous[2] == channel.calibration and (at-previous[3]['observed_at']).total_seconds() <= 3):
-                    approaches[direction] = previous[3].copy()
-                    vehicles.extend(previous[4])
-                    if previous[5]:
-                        issues[direction] = previous[5]
-                    continue
                 issues[direction] = 'Video atau tracking belum mutakhir.'
                 continue
             calibration = channel.calibration
@@ -137,7 +119,7 @@ class VideoMeasurements:
             occupied_area = 0.0
             controlled_area = sum(polygon_area(calibration.lanes[l]) for l in ('middle','inner')) if calibration else 0.0
             if not calibration:
-                issues[direction] = 'Tandai tiga lajur dan garis henti dahulu. Kendaraan tetap ditampilkan secara skematis.'
+                issues[direction] = 'Tandai tiga lajur dan garis henti dahulu. Hitungan zona belum tersedia.'
             generation = (channel.tracker_session, calibration.model_dump_json() if calibration else '')
             if self.samples.get(direction, (None,))[0] != generation:
                 self.history[direction] = {}
@@ -145,7 +127,7 @@ class VideoMeasurements:
             histories = self.history[direction]
             fresh_sample = self.samples[direction][1] != channel.tracked_id
             ambiguous, entries = False, []
-            for track in channel.tracks:
+            for track in zone_tracks(channel.tracks, calibration):
                 x1, _, x2, y = track.bbox
                 x = (x1+x2)/2
                 lanes = [lane for lane, polygon in calibration.lanes.items() if inside(x, y, polygon)] if calibration else []
@@ -153,14 +135,6 @@ class VideoMeasurements:
                     ambiguous = True
                 if lanes:
                     lane = lanes[0]
-                elif calibration:
-                    # An unmatched detection is still real; choose the nearest
-                    # marked lane for display, without counting it as demand.
-                    lane = min(calibration.lanes, key=lambda name: hypot(
-                        x-sum(p.x for p in calibration.lanes[name])/len(calibration.lanes[name]),
-                        y-sum(p.y for p in calibration.lanes[name])/len(calibration.lanes[name])))
-                else:
-                    lane = ('outer', 'middle', 'inner')[min(2, int(x*3))]
                 distance, passed, measured = (1-y)*625, False, False
                 if calibration and len(lanes) == 1:
                     polygon = calibration.lanes[lane]
@@ -221,7 +195,7 @@ class VideoMeasurements:
             vehicles.extend(displayed)
             self.samples[direction] = (generation, channel.tracked_id)
             for identity in list(histories):
-                if now-histories[identity]['last'] > 3:
+                if identity not in {e['track'].track_id for e in entries} or now-histories[identity]['last'] > 3:
                     del histories[identity]
             value['occupancy_ratio'] = min(1.0, occupied_area/max(controlled_area, .0001))
             value['usable'] = calibration is not None and not ambiguous

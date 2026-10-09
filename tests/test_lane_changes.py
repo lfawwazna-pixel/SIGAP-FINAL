@@ -6,7 +6,7 @@ import pytest
 
 from atcs_simulator.app.traffic import (
     TrafficWorld, DIRECTIONS, LANES, MOVEMENT_LANE, START, CHANGE_END,
-    CHANGE_START, VEHICLE_LENGTH, GAP, rotate,
+    CHANGE_START, VEHICLE_LENGTH, GAP, rotate, bodies_overlap,
 )
 from atcs_simulator.app.experiment import Experiment
 from contracts.configuration import load_config
@@ -17,7 +17,10 @@ RED = dict.fromkeys(DIRECTIONS, 'red')
 
 def assert_spacing(world):
     for one, two in combinations(world.vehicles, 2):
-        assert math.dist(one.position()[:2], two.position()[:2]) >= VEHICLE_LENGTH+GAP-.001
+        if world.mixed_traffic:
+            assert not bodies_overlap(one, one.position(), two, two.position(), safety=False)
+        else:
+            assert math.dist(one.position()[:2], two.position()[:2]) >= VEHICLE_LENGTH+GAP-.001
 
 
 @pytest.mark.parametrize('direction', DIRECTIONS)

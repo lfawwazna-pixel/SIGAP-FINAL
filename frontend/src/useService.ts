@@ -41,10 +41,10 @@ export function useService<T>(path: string, validate: (data: unknown) => data is
   return { data, error, refresh: () => refresh(v => v+1) }
 }
 
-export async function postService(path: string, csrf: string, body: unknown, raw = false) {
+export async function postService(path: string, csrf: string, body: unknown, raw = false, timeoutMs?: number) {
   const generation = authGeneration()
   const abort = new AbortController()
-  const timeout = setTimeout(() => abort.abort(), raw ? 120000 : 8000)
+  const timeout = setTimeout(() => abort.abort(), timeoutMs ?? (raw ? 120000 : 8000))
   try {
   const r = await fetch(apiBase+path, { method: 'POST', credentials: 'same-origin',
     signal: abort.signal,

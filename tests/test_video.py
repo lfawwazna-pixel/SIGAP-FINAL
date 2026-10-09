@@ -48,8 +48,12 @@ def test_video_auth_csrf_source_guards_and_calibration(video_context):
     assert state['state'] == 'connecting' and state['source'] == 'recording'
     assert client.post(query, headers=headers, content=mp4).status_code == 409
     command = dict(expected_session=state['source_session'], action='calibrate', calibration=calibration())
+    channel = app.state.video.channels['U']
+    generation = channel.tracker_session
+    channel.tracked_frame = b'old-zone-overlay'
     assert client.post('/api/video/U/commands', headers=headers, json=command).status_code == 200
     channel = app.state.video.channels['U']
+    assert channel.tracker_session != generation and channel.tracked_frame is None and not channel.tracks
     restored = VideoChannel('U', channel.directory)
     assert restored.calibration == channel.calibration and restored.source == 'recording'
     assert restored.session != channel.session and restored.frame is None

@@ -9,7 +9,7 @@ from backend.app.video import VideoChannel
 from backend.app.vision import VisionWorker
 from contracts.video import TrackedVehicle
 from test_auth import auth_context, login  # noqa: F401
-from test_video import video_context  # noqa: F401
+from test_video import calibration, video_context  # noqa: F401
 
 
 def test_worker_shutdown_reaps_real_child_and_closes_its_pipes(tmp_path):
@@ -44,6 +44,8 @@ def test_overlay_uses_its_own_frame_and_falls_back_when_stale(video_context):
     channel.tracked_frame, channel.tracked_id = b'\xff\xd8tracked\xff\xd9', 19
     channel.tracked_raw = b'\xff\xd8matchedraw\xff\xd9'
     channel.tracked_at, channel.tracked_position = time.monotonic(), 3.8
+    from contracts.video import VideoCalibration
+    channel.calibration = VideoCalibration.model_validate(calibration())
     channel.tracks = [TrackedVehicle(track_id=1, class_name='car', confidence=.8, bbox=[.1,.1,.4,.4])]
     raw = client.get('/api/video/U/frame?overlay=false')
     tracked = client.get('/api/video/U/frame?overlay=true')
@@ -54,6 +56,9 @@ def test_overlay_uses_its_own_frame_and_falls_back_when_stale(video_context):
     assert tracked.headers['x-frame-id'] == '19' and tracked.headers['x-media-seconds'] == '3.8'
     assert tracked.headers['x-source-session'] == raw.headers['x-source-session']
     assert raw.headers['x-track-count'] == tracked.headers['x-track-count'] == '1'
+    channel.tracks += [TrackedVehicle(track_id=2, class_name='truck', confidence=.95, bbox=[.9,.1,1,.4])]
+    assert client.get('/api/video/U/frame?overlay=true').headers['x-track-count'] == '1'
+    assert len(channel.view().tracking.tracks) == 1
     channel.tracks = []
     assert client.get('/api/video/U/frame?overlay=true').headers['x-track-count'] == '0'
     channel.tracked_at -= 4

@@ -1,7 +1,7 @@
 import { directions, directionNames, type Direction } from './traffic'
 import geometry from './geometry/map-geometry.json'
 
-const { slip, lane_centers: lanes, start, stop_line: stop } = geometry
+const { slip, lane_centers: lanes, stop_line: stop } = geometry
 export const slipPath = `M${slip.start.join(' ')} C${slip.control1.join(' ')} ${slip.control2.join(' ')} ${slip.end.join(' ')}`
 
 function LaneArrow({ x, y, turn, sign = false }: { x: number; y: number; turn?: 'left' | 'right'; sign?: boolean }) {
@@ -14,17 +14,22 @@ function LaneArrow({ x, y, turn, sign = false }: { x: number; y: number; turn?: 
 }
 
 /** One road drawing for the operator map and the public login illustration. */
-export function JunctionRoad({ selected, markerId, signs = true }: { selected: Direction; markerId: string; signs?: boolean }) {
+export function JunctionRoad({ selected, markerId, signs = true, roadStart = geometry.start }: { selected: Direction; markerId: string; signs?: boolean; roadStart?: number }) {
+  const start = roadStart
+  const end = 2 * geometry.center - start
+  // Replace both endpoints in one pass; do not rematch a new negative endpoint.
+  const outline = geometry.road_outline.replace(/-?\d+(?:\.\d+)?/g, value =>
+    Number(value) === geometry.start ? String(start) : Number(value) === geometry.end ? String(end) : value)
   const dividers = [
     ...geometry.outgoing_centers.slice(1).map((x, i) => `M${(x+geometry.outgoing_centers[i])/2} ${start+20} V${stop}`),
     `M${(lanes.inner+lanes.middle)/2} ${start+20} V${geometry.lane_change.end}`,
     `M${(lanes.middle+lanes.outer)/2} ${start+20} V${geometry.lane_change.end}`,
   ].join(' ')
   return <>
-    <path className="road" d={geometry.road_outline} />
+    <path className="road" d={outline} />
     {directions.map((code, i) => <g key={code} transform={`rotate(${i*90} ${geometry.center} ${geometry.center})`}>
       <path className="island" data-island={code} d={geometry.island} />
-      {selected === code && <path className="approach-highlight" d="M410 -380 H528 V98 H488 V253 H410 Z" />}
+      {selected === code && <path className="approach-highlight" d={`M410 ${start+20} H528 V98 H488 V253 H410 Z`} />}
       <path className="lane-divider" d={dividers} />
       <path className="lane-guide" d={`M450 ${geometry.lane_change.end} V${stop} M490 ${geometry.lane_change.end} V${slip.start[1]}`} />
       <rect className="median" x={geometry.center-4} y={start+20} width="8" height={stop-start-27} rx="4" />

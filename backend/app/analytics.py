@@ -15,6 +15,7 @@ from backend.app.auth import error, require_operator
 from backend.app.mutations import require_mutation
 from backend.app.traffic_forecast import forecast
 from backend.app.impact_comparison import simulate
+from backend.app.zone_analytics import ZoneDemandCollector
 
 class AnalyticsStore:
     def __init__(self,path): self.path=Path(path)
@@ -92,6 +93,10 @@ class AnalyticsService:
         self.busy=asyncio.Lock()
         self.configured=bool(settings.sigap_tomtom_api_key.get_secret_value()) and self.config_error is None
         self.backoff=False
+        self.zone_demand=ZoneDemandCollector()
+
+    def observe_video(self, hub):
+        self.zone_demand.observe(hub)
 
     async def start(self):
         if not self.configured: return
@@ -166,12 +171,16 @@ class AnalyticsService:
         return AnalyticsView(intersection_id=self.config.intersection_id,generated_at=now,provider_status=status,
             provider_message=self.config_error or message,poll_seconds=self.settings.sigap_tomtom_poll_seconds,
             attribution='Traffic data © TomTom; indeks dan prediksi lokal SIGAP.',history_since=min(stamps) if stamps else None,
-            roads=roads,latest_comparison=comparison)
+            roads=roads,latest_comparison=comparison,zone_demand=self.zone_demand.snapshot(at=now))
 
     async def compare(self,spec):
         if self.busy.locked(): raise error(429,'ANALYTICS_BUSY','Satu perbandingan sedang diproses. Tunggu sebentar.')
         async with self.busy:
-            report=await asyncio.to_thread(simulate,spec,self.config)
+            provenance=None
+            if spec.demand_source=='zone_observation':
+                try: spec,provenance=self.zone_demand.resolve(spec)
+                except ValueError as exc: raise error(409,'ZONE_PROFILE_EXPIRED',str(exc)) from None
+            report=await asyncio.to_thread(simulate,spec,self.config,provenance)
             try: await asyncio.to_thread(self.store.save_comparison,report)
             except (sqlite3.Error,OSError): raise error(503,'ANALYTICS_STORAGE','Hasil belum dapat disimpan. Pengendali tidak terpengaruh.') from None
             return report
@@ -190,10 +199,18 @@ def export(identity:UUID,request:Request):
     except (sqlite3.Error,OSError,ValueError): raise error(503,'ANALYTICS_STORAGE','Arsip perbandingan belum tersedia.') from None
     if not report: raise error(404,'COMPARISON_MISSING','Perbandingan tidak ditemukan.')
     output=StringIO(); writer=csv.writer(output)
-    writer.writerow(['source','seed','duration_seconds','demand_U','demand_T','demand_S','demand_B','detection_fraction','headway_seconds','idle_liters_per_hour','co2_kg_per_liter','fuel_rupiah_per_liter','time_rupiah_per_vehicle_hour','queue_spacing_meters','arrival_schedule_sha256'])
-    writer.writerow([report.source,report.input.seed,report.input.duration_seconds,*[report.input.demand_per_minute[d] for d in 'UTSB'],report.input.detection_fraction,report.input.discharge_headway_seconds,*report.input.factors.model_dump().values(),report.arrival_schedule_sha256])
+    writer.writerow(['source','method_version','arrival_schedule_sha256','input','demand_provenance','references','assumptions'])
+    writer.writerow([report.source,report.method_version,report.arrival_schedule_sha256,report.input.model_dump_json(),
+        report.demand_provenance.model_dump_json() if report.demand_provenance else '',
+        json.dumps([r.model_dump() for r in report.references],ensure_ascii=False),json.dumps(report.assumptions,ensure_ascii=False)])
     writer.writerow(['baseline_green_seconds','yellow_seconds','all_red_seconds','adaptive_policy'])
     writer.writerow([json.dumps(report.baseline_green_seconds),report.yellow_seconds,report.all_red_seconds,report.adaptive_policy.model_dump_json()])
+    writer.writerow(['metric','atcs_mean','sigap_mean','improvement_mean','improvement_percent','lower_95','upper_95','result'])
+    for metric in report.metrics: writer.writerow(list(metric.model_dump().values()))
+    writer.writerow(['seed','arrival_schedule_sha256','atcs','sigap','atcs_by_approach','sigap_by_approach'])
+    for run in report.runs:
+        writer.writerow([run.seed,run.arrival_schedule_sha256,run.atcs.model_dump_json(),run.sigap.model_dump_json(),
+            json.dumps({d:p.model_dump() for d,p in run.atcs_by_approach.items()}),json.dumps({d:p.model_dump() for d,p in run.sigap_by_approach.items()})])
     fields=list(report.atcs[0].model_dump())
     writer.writerow(['strategy',*fields])
     for strategy,points in [('ATCS',report.atcs),('SIGAP',report.sigap)]:

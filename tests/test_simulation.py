@@ -92,3 +92,38 @@ def test_simulation_pause_speed_reset_preserves_configuration_only():
     fresh = cmd(action='reset')
     assert fresh.world.time == 0 and fresh.speed == 3 and fresh.strategy == 'fixed_time'
     assert fresh.run_id != exp.run_id and not fresh.running
+
+
+def test_dense_catch_up_allows_operator_pause_between_atomic_ticks():
+    import asyncio
+    manager = Experiments(load_config())
+    key = uuid4()
+    experiment = manager.get(key)
+    experiment.running, experiment.speed = True, 3
+    async def run():
+        updating = asyncio.create_task(manager.advance_responsively(experiment, .5))
+        await asyncio.sleep(0)
+        snapshot = TrafficView.model_validate(experiment.snapshot(manager.config.intersection_id))
+        assert 0 < snapshot.time_seconds < 1.5
+        manager.command(key, SimulationCommand(action='pause', expected_run_id=experiment.run_id))
+        paused_at = experiment.world.time
+        await updating
+        assert experiment.world.time == paused_at and not experiment.running
+    asyncio.run(run())
+
+
+def test_reset_stops_old_world_during_responsive_catch_up():
+    import asyncio
+    manager = Experiments(load_config())
+    key = uuid4()
+    previous = manager.get(key)
+    previous.running, previous.speed = True, 3
+    async def run():
+        updating = asyncio.create_task(manager.advance_responsively(previous, .5))
+        await asyncio.sleep(0)
+        fresh = manager.command(key, SimulationCommand(action='reset', expected_run_id=previous.run_id))
+        stopped_at = previous.world.time
+        await updating
+        assert previous.world.time == stopped_at
+        assert manager.get(key) is fresh and fresh.world.time == 0 and not fresh.running
+    asyncio.run(run())

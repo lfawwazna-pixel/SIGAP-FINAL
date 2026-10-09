@@ -124,8 +124,8 @@ def test_simulation_has_same_arrivals_conserves_vehicles_and_is_reproducible():
     assert first.atcs[-1].arrivals==first.sigap[-1].arrivals==first.total_scheduled_arrivals
     for a,b in zip(first.atcs,first.sigap):
         assert a.time_seconds==b.time_seconds and a.arrivals==b.arrivals
-        assert a.arrivals==a.queue_vehicles+a.completed_vehicles
-        assert b.arrivals==b.queue_vehicles+b.completed_vehicles
+        assert a.arrivals+a.initial_queue_vehicles==a.queue_vehicles+a.completed_vehicles
+        assert b.arrivals+b.initial_queue_vehicles==b.queue_vehicles+b.completed_vehicles
     changed=simulate(spec.model_copy(update={'seed':43}),load_config())
     assert changed.arrival_schedule_sha256!=first.arrival_schedule_sha256
 
@@ -135,16 +135,16 @@ def test_zero_demand_does_not_fabricate_queue_wait_or_benefit():
     assert all(p.queue_vehicles==p.completed_vehicles==p.co2_kg==p.average_wait_seconds==0 for p in report.atcs+report.sigap)
 
 def test_impact_factors_are_applied_only_to_queue_vehicle_seconds():
-    spec=ComparisonInput(duration_seconds=300,factors=dict(idle_liters_per_hour=1,co2_kg_per_liter=2,
+    spec=ComparisonInput(duration_seconds=300,class_mix=dict(motorcycle=0,car=1,bus=0,truck=0),factors=dict(idle_liters_per_hour=1,co2_kg_per_liter=2,
         fuel_rupiah_per_liter=5000,time_rupiah_per_vehicle_hour=3600,queue_spacing_meters=5))
     report=simulate(spec,load_config())
     for p in [report.atcs[-1],report.sigap[-1]]:
         assert p.idle_fuel_liters==pytest.approx(p.cumulative_wait_vehicle_seconds/3600,abs=1e-5)
         assert p.co2_kg==pytest.approx(p.cumulative_wait_vehicle_seconds/1800,abs=1e-5)
-        assert p.time_cost_rupiah==p.cumulative_wait_vehicle_seconds
+        assert p.time_cost_rupiah==pytest.approx(p.cumulative_wait_vehicle_seconds,abs=.0001)
         assert p.queue_meters_estimate==p.queue_vehicles*5
 
-@pytest.mark.parametrize('bad',[dict(duration_seconds=1801),dict(duration_seconds=300.5),dict(detection_fraction=0),dict(demand_per_minute={'U':1}),dict(demand_per_minute=dict(U=61,T=2,S=2,B=2)),dict(factors={'idle_liters_per_hour':float('inf')})])
+@pytest.mark.parametrize('bad',[dict(duration_seconds=1801),dict(duration_seconds=300.5),dict(detection_fraction=0),dict(demand_per_minute={'U':1}),dict(demand_per_minute=dict(U=181,T=2,S=2,B=2)),dict(factors={'idle_liters_per_hour':float('inf')})])
 def test_comparison_rejects_unbounded_or_ambiguous_inputs(bad):
     with pytest.raises(ValidationError): ComparisonInput(**bad)
 

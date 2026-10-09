@@ -1,0 +1,8 @@
+{
+  "motorcycle": { "length": 22, "width": 10 },
+  "car": { "length": 26, "width": 18 },
+  "bus": { "length": 52, "width": 20 },
+  "truck": { "length": 52, "width": 20 },
+  "ambulance": { "length": 30, "width": 18 },
+  "fire_engine": { "length": 26, "width": 18 }
+}

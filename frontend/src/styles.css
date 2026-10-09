@@ -383,6 +383,26 @@ footer > span:last-child { white-space: nowrap; }
 .map-vehicle--ambulance .ambulance-cross { stroke: #ba384b; stroke-width: 3; fill: none; }
 .map-vehicle--fire_engine rect { fill: #b83c30; stroke: #6f2620; }
 .fire-ladder { fill: none; stroke: #ffeed6; stroke-width: 1.2; }
+.vehicle-glyph rect { fill: #668ca8; stroke: #25495f; stroke-width: 1.5; }
+.vehicle-glyph .vehicle-window { fill: #c7e2ed; }
+.vehicle-glyph--motorcycle rect { fill: #287a79; stroke: #184b4d; }
+.motorcycle-wheel { fill: none; stroke: #172f3a; stroke-width: 3; stroke-linecap: round; }
+.motorcycle-handlebar { fill: none; stroke: #184b4d; stroke-width: 1.5; stroke-linecap: round; }
+.motorcycle-rider { fill: #d6e7e8; stroke: #184b4d; stroke-width: 1; }
+.vehicle-glyph--bus rect { fill: #bd9349; stroke: #694e24; }
+.vehicle-glyph--bus .bus-roof { fill: #dcc38e; stroke-width: 1; }
+.bus-windows { fill: none; stroke: #edf2ee; stroke-width: 2; }
+.vehicle-glyph--truck rect { fill: #9babb6; stroke: #405869; }
+.vehicle-glyph--truck .truck-cab { fill: #557b99; }
+.cargo-lines { fill: none; stroke: #718899; stroke-width: 1; }
+.vehicle-glyph--ambulance rect { fill: #fff; stroke: #9b3543; stroke-width: 2; }
+.vehicle-glyph .ambulance-cross { fill: none; stroke: #ba384b; stroke-width: 3; }
+.vehicle-glyph--fire_engine rect { fill: #b83c30; stroke: #6f2620; }
+.emergency-lightbar { fill: none; stroke: #4191ba; stroke-width: 2; }
+.vehicle-kind-legend { display: flex; flex-wrap: wrap; align-items: center; gap: 9px 16px; padding: 12px 20px; border-top: 1px solid #dbe3e9; background: #fff; color: #405969; font-size: 12px; }
+.vehicle-kind-legend > span { display: inline-flex; align-items: center; gap: 6px; }
+.vehicle-kind-legend svg { width: 36px; height: 28px; flex-shrink: 0; }
+.vehicle-kind-legend .vehicle-kind-label { font-weight: 600; }
 .evp-number { font-family: 'IBM Plex Mono', monospace; font-size: 18px; font-weight: 600; fill: #862d38; paint-order: stroke; stroke: #fff; stroke-width: 4; }
 .intersection-map .map-selector text { font-size: 24px; }
 .intersection-map .map-annotation { font-size: 20px; }

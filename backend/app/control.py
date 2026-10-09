@@ -119,4 +119,6 @@ async def command(payload: OperatorControl, request: Request, principal: Princip
     if result.outcome in ('accepted', 'applied') and request.app.state.adaptive.video_mode:
         request.app.state.adaptive.auto_resume = payload.action == 'activate'
         request.app.state.adaptive.held = payload.action == 'release'
+        if payload.action == 'release':
+            request.app.state.adaptive.suspend_emergency()
     return JSONResponse(result.model_dump(mode='json'), status_code=409 if result.outcome == 'rejected' else 200)

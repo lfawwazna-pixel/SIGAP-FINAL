@@ -137,3 +137,28 @@ describe('isolated simulator UI', () => {
     expect(coherentTraffic({ ...fixture(), signals: { U: 'green', T: 'green', S: 'red', B: 'red' } }, 'experiment', config.intersection_id)).toBe(false)
   })
 })
+
+it('renders all four ordinary classes with physical body proportions and keeps emergency spawn manual', async () => {
+  const kinds = ['motorcycle','car','bus','truck'] as const
+  simulation.vehicles = kinds.map((kind,index)=>({id:index+10,kind,origin:'U',movement:'straight',x:470,y:-350+index*70,heading:90,
+    stopped:false,served:false,distance_to_stop:607-index*70,lane:'middle',target_lane:'middle',changing_to:null,stop_reason:null}))
+  render(<App />)
+  await flush()
+  selectSimulation()
+  await flush()
+  const sandbox = screen.getByRole('region',{name:'Ruang simulasi terpisah'})
+  for (const kind of kinds) expect(sandbox.querySelector(`.map-vehicle--${kind}`)).toBeTruthy()
+  expect(sandbox.querySelector('.map-vehicle--ambulance')).toBeNull()
+  expect(sandbox.querySelector('.map-vehicle--fire_engine')).toBeNull()
+  expect(within(sandbox).getByText(/Motor, mobil, bus, dan truk muncul otomatis secara acak/)).toBeTruthy()
+  expect(within(sandbox).getByText(/Hingga tiga motor dapat berbagi lebar satu lajur/)).toBeTruthy()
+  expect(within(sandbox).getByText('Kendaraan simulasi')).toBeTruthy()
+  expect(within(sandbox).queryByText('Kelas dari YOLO')).toBeNull()
+  expect(within(sandbox).getByRole('button',{name:/Spawn ambulans/})).toBeTruthy()
+  expect(within(sandbox).getByRole('button',{name:'Spawn pemadam'})).toBeTruthy()
+  expect(postBodies).toHaveLength(0)
+  fireEvent.click(within(sandbox).getByRole('button',{name:'Mulai'}))
+  await flush()
+  expect(postBodies.map(body=>body.action)).toEqual(['start'])
+  expect(sandbox.querySelectorAll('.map-vehicle')).toHaveLength(4)
+})

@@ -6,8 +6,7 @@ export function freshVideoObservation(observedAt: string, now = Date.now()) {
   return Number.isFinite(age) && age >= -.5 && age <= 3
 }
 
-/** Display every fresh tracked object, even when its lane is not calibrated.
- * Calibration determines control demand; it must not hide detected vehicles. */
+/** Display fresh zone-admitted tracks supplied by the backend. */
 export function videoMapVehicles(data: AdaptiveStatus | null, intersection: string | undefined, now = Date.now()) {
   if (!data?.enabled || data.source === 'synthetic' || !data.measurements
       || data.measurements.intersection_id !== intersection) return []

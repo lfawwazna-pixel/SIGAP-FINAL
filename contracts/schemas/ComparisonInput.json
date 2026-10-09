@@ -4,7 +4,7 @@
       "additionalProperties": false,
       "properties": {
         "idle_liters_per_hour": {
-          "default": 0.8,
+          "default": 0.87064471032,
           "maximum": 10,
           "minimum": 0,
           "title": "Idle Liters Per Hour",
@@ -37,9 +37,111 @@
           "minimum": 1,
           "title": "Queue Spacing Meters",
           "type": "number"
+        },
+        "diesel_co2_kg_per_liter": {
+          "default": 2.69,
+          "maximum": 5,
+          "minimum": 0,
+          "title": "Diesel Co2 Kg Per Liter",
+          "type": "number"
+        },
+        "diesel_fuel_rupiah_per_liter": {
+          "default": 10000,
+          "maximum": 100000,
+          "minimum": 0,
+          "title": "Diesel Fuel Rupiah Per Liter",
+          "type": "number"
         }
       },
       "title": "ImpactFactors",
+      "type": "object"
+    },
+    "TrafficComposition": {
+      "additionalProperties": false,
+      "properties": {
+        "class_mix": {
+          "additionalProperties": {
+            "minimum": 0,
+            "type": "number"
+          },
+          "propertyNames": {
+            "enum": [
+              "motorcycle",
+              "car",
+              "bus",
+              "truck"
+            ]
+          },
+          "title": "Class Mix",
+          "type": "object"
+        },
+        "turn_mix": {
+          "additionalProperties": {
+            "minimum": 0,
+            "type": "number"
+          },
+          "propertyNames": {
+            "enum": [
+              "left",
+              "straight",
+              "right"
+            ]
+          },
+          "title": "Turn Mix",
+          "type": "object"
+        }
+      },
+      "required": [
+        "class_mix",
+        "turn_mix"
+      ],
+      "title": "TrafficComposition",
+      "type": "object"
+    },
+    "VehicleFactors": {
+      "additionalProperties": false,
+      "properties": {
+        "queue_space_multiplier": {
+          "maximum": 5,
+          "minimum": 0.1,
+          "title": "Queue Space Multiplier",
+          "type": "number"
+        },
+        "discharge_multiplier": {
+          "maximum": 5,
+          "minimum": 0.2,
+          "title": "Discharge Multiplier",
+          "type": "number"
+        },
+        "idle_multiplier": {
+          "maximum": 10,
+          "minimum": 0,
+          "title": "Idle Multiplier",
+          "type": "number"
+        },
+        "fuel": {
+          "enum": [
+            "gasoline",
+            "diesel"
+          ],
+          "title": "Fuel",
+          "type": "string"
+        },
+        "parallel_slots": {
+          "default": 1,
+          "maximum": 3,
+          "minimum": 1,
+          "title": "Parallel Slots",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "queue_space_multiplier",
+        "discharge_multiplier",
+        "idle_multiplier",
+        "fuel"
+      ],
+      "title": "VehicleFactors",
       "type": "object"
     }
   },
@@ -61,9 +163,9 @@
     },
     "demand_per_minute": {
       "additionalProperties": {
-        "maximum": 60,
+        "maximum": 180,
         "minimum": 0,
-        "type": "integer"
+        "type": "number"
       },
       "propertyNames": {
         "enum": [
@@ -77,7 +179,7 @@
       "type": "object"
     },
     "detection_fraction": {
-      "default": 0.65,
+      "default": 1,
       "maximum": 1,
       "minimum": 0.1,
       "title": "Detection Fraction",
@@ -92,6 +194,118 @@
     },
     "factors": {
       "$ref": "#/$defs/ImpactFactors"
+    },
+    "warmup_seconds": {
+      "default": 300,
+      "maximum": 900,
+      "minimum": 0,
+      "title": "Warmup Seconds",
+      "type": "integer"
+    },
+    "replications": {
+      "default": 10,
+      "maximum": 30,
+      "minimum": 5,
+      "title": "Replications",
+      "type": "integer"
+    },
+    "startup_lost_seconds": {
+      "default": 2,
+      "maximum": 5,
+      "minimum": 0,
+      "title": "Startup Lost Seconds",
+      "type": "number"
+    },
+    "demand_source": {
+      "default": "manual_scenario",
+      "enum": [
+        "manual_scenario",
+        "zone_observation"
+      ],
+      "title": "Demand Source",
+      "type": "string"
+    },
+    "observation_fingerprint": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Observation Fingerprint"
+    },
+    "queue_visibility": {
+      "default": "partial",
+      "enum": [
+        "full",
+        "partial"
+      ],
+      "title": "Queue Visibility",
+      "type": "string"
+    },
+    "class_mix": {
+      "additionalProperties": {
+        "minimum": 0,
+        "type": "number"
+      },
+      "propertyNames": {
+        "enum": [
+          "motorcycle",
+          "car",
+          "bus",
+          "truck"
+        ]
+      },
+      "title": "Class Mix",
+      "type": "object"
+    },
+    "turn_mix": {
+      "additionalProperties": {
+        "minimum": 0,
+        "type": "number"
+      },
+      "propertyNames": {
+        "enum": [
+          "left",
+          "straight",
+          "right"
+        ]
+      },
+      "title": "Turn Mix",
+      "type": "object"
+    },
+    "vehicle_factors": {
+      "additionalProperties": {
+        "$ref": "#/$defs/VehicleFactors"
+      },
+      "propertyNames": {
+        "enum": [
+          "motorcycle",
+          "car",
+          "bus",
+          "truck"
+        ]
+      },
+      "title": "Vehicle Factors",
+      "type": "object"
+    },
+    "approach_composition": {
+      "additionalProperties": {
+        "$ref": "#/$defs/TrafficComposition"
+      },
+      "propertyNames": {
+        "enum": [
+          "U",
+          "T",
+          "S",
+          "B"
+        ]
+      },
+      "title": "Approach Composition",
+      "type": "object"
     }
   },
   "title": "ComparisonInput",

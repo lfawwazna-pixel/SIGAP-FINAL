@@ -8,6 +8,7 @@ from pathlib import Path
 import sys
 import time
 from types import SimpleNamespace
+from contracts.zones import zone_tracks
 from vision.stability import TrackStabilizer, distinct_box_indices
 
 os.environ.setdefault('YOLO_AUTOINSTALL', 'false')
@@ -90,6 +91,8 @@ def main():
                 objects.append(dict(track_id=track_id, class_name=name, confidence=float(score),
                     bbox=[float(max(0, min(1, v))) for v in (x1/width, y1/height, x2/width, y2/height)]))
             objects = state['stable'].update(objects, request['frame_id']/request['fps'])
+            all_objects = objects
+            objects = zone_tracks(objects, request.get('calibration'))
             for obj in objects:
                 track_id, name = obj['track_id'], obj['class_name']
                 if request.get('focus_evp') and name not in ('ambulance', 'fire_truck'):
@@ -106,7 +109,7 @@ def main():
             if not ok:
                 raise ValueError('JPEG encoding failed')
             response = dict(direction=request['direction'], session=request['session'], frame_id=request['frame_id'],
-                jpeg=base64.b64encode(encoded).decode('ascii'), tracks=objects,
+                jpeg=base64.b64encode(encoded).decode('ascii'), tracks=objects, all_tracks=all_objects,
                 processing_ms=(time.perf_counter() - started) * 1000, device=device)
             if diagnostics:
                 timings = dict(decode=(decoded_at-started)*1000,

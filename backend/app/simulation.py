@@ -37,6 +37,19 @@ class Experiments:
         with suppress(asyncio.CancelledError):
             await self.task
 
+    async def advance_responsively(self, experiment, seconds):
+        """Keep polling and operator commands responsive during dense catch-up.
+
+        Every tick stays atomic on the event loop. Yield only between complete
+        physics/controller ticks, so a pause/reset never cuts a safety check.
+        """
+        remaining = min(max(0, seconds), .5)*experiment.speed
+        while remaining > .000001 and experiment.running:
+            dt = min(.05, remaining)
+            experiment.tick(dt)
+            remaining -= dt
+            await asyncio.sleep(0)
+
     async def run(self):
         last = time.monotonic()
         try:
@@ -44,7 +57,7 @@ class Experiments:
                 now = time.monotonic()
                 self.items = {k: v for k, v in self.items.items() if now-v[1] < 3600}
                 for experiment, _ in list(self.items.values()):
-                    experiment.advance(now-last)
+                    await self.advance_responsively(experiment, now-last)
                 last = now
                 await asyncio.sleep(.05)
         except asyncio.CancelledError:
@@ -59,6 +72,9 @@ class Experiments:
         if str(command.expected_run_id) != experiment.run_id:
             raise error(409, 'SIMULATION_CHANGED', 'Percobaan sudah direset. Muat keadaan terbaru sebelum memberi perintah.')
         if command.action == 'reset':
+            # A responsive catch-up may still hold this old instance. Stop it
+            # before replacing the account's world with the fresh paused one.
+            experiment.running = False
             fresh = Experiment(self.config, experiment.seed)
             fresh.speed, fresh.strategy = experiment.speed, experiment.strategy
             fresh.world.demand = dict(experiment.world.demand)

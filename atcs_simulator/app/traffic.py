@@ -10,6 +10,12 @@ DIRECTIONS = ('U', 'T', 'S', 'B')
 LANES = ('outer', 'middle', 'inner')
 MOVEMENT_LANE = {'left': 'outer', 'straight': 'middle', 'right': 'inner'}
 VEHICLE_LENGTH, GAP = 26.0, 8.0
+BODY_DIMENSIONS = json.loads((PROJECT_ROOT / 'configs/vehicle-dimensions.json').read_text(encoding='utf-8'))
+ORDINARY_KINDS = ('motorcycle', 'car', 'bus', 'truck')
+ORDINARY_WEIGHTS = (45, 45, 5, 5)
+EMERGENCY_KINDS = ('ambulance', 'fire_engine')
+MOTOR_OFFSETS = (-14.0, 0.0, 14.0)
+LATERAL_GAP = 2.0
 MAP_GEOMETRY = json.loads((PROJECT_ROOT / 'configs/map-geometry.json').read_text(encoding='utf-8'))
 START, END, CENTER = (MAP_GEOMETRY[k] for k in ('start', 'end', 'center'))
 LANE_X = MAP_GEOMETRY['lane_centers']
@@ -88,6 +94,15 @@ class Vehicle:
     stopped: bool = False
     committed: bool = False
     served: bool = False
+    lateral_offset: float = 0.0
+
+    @property
+    def length(self):
+        return BODY_DIMENSIONS[self.kind]['length']
+
+    @property
+    def width(self):
+        return BODY_DIMENSIONS[self.kind]['width']
 
     @property
     def route(self):
@@ -108,7 +123,9 @@ class Vehicle:
     def position(self, distance=None):
         distance = self.distance if distance is None else distance
         if distance >= MAP_GEOMETRY['slip']['start'][1] - START:
-            return self.route.position(distance)
+            x, y, heading = self.route.position(distance)
+            angle = math.radians(heading-90)
+            return (x+self.lateral_offset*math.cos(angle), y+self.lateral_offset*math.sin(angle), heading)
         x, slope = LANE_X[self.lane], 0.0
         if self.changing_to:
             t = min(1.0, max(0.0, (distance-self.change_start)/CHANGE_LENGTH))
@@ -116,7 +133,7 @@ class Vehicle:
             x += delta*(10*t**3 - 15*t**4 + 6*t**5)
             slope = delta*30*t*t*(1-t)*(1-t)/CHANGE_LENGTH
         index = DIRECTIONS.index(self.route.origin)
-        point = rotate((x, START+distance), index)
+        point = rotate((x+self.lateral_offset, START+distance), index)
         heading = (math.degrees(math.atan2(1, slope)) + 90*index + 180) % 360 - 180
         return (*point, heading)
 
@@ -128,11 +145,38 @@ def swept_distance(a, b, point):
     return math.hypot(a[0]+t*dx-point[0], a[1]+t*dy-point[1])
 
 
+def bodies_overlap(a, pose_a, b, pose_b, *, safety=True):
+    """Oriented body rectangles; longitudinal and lateral gaps are distinct.
+
+    A 2-unit lateral gap allows three 10-unit motorcycles in a 40-unit lane.
+    The 8-unit longitudinal gap stays behind the actual tail of longer bodies.
+    """
+    dx, dy = pose_b[0]-pose_a[0], pose_b[1]-pose_a[1]
+    extra_length, extra_width = (GAP, LATERAL_GAP) if safety else (0, 0)
+    radius = (math.hypot(a.length+extra_length, a.width+extra_width)
+              + math.hypot(b.length+extra_length, b.width+extra_width))/2
+    if dx*dx+dy*dy >= radius*radius:
+        return False
+    axes = []
+    for pose in (pose_a, pose_b):
+        angle = math.radians(pose[2])
+        axes.append(((math.cos(angle), math.sin(angle)), (-math.sin(angle), math.cos(angle))))
+    half_a = ((a.length+extra_length)/2, (a.width+extra_width)/2)
+    half_b = ((b.length+extra_length)/2, (b.width+extra_width)/2)
+    for axis in (*axes[0], *axes[1]):
+        radius_a = sum(half_a[i]*abs(axis[0]*axes[0][i][0]+axis[1]*axes[0][i][1]) for i in (0, 1))
+        radius_b = sum(half_b[i]*abs(axis[0]*axes[1][i][0]+axis[1]*axes[1][i][1]) for i in (0, 1))
+        if abs(dx*axis[0]+dy*axis[1]) >= radius_a+radius_b-.00001:
+            return False
+    return True
+
+
 class TrafficWorld:
     source = 'provider'
 
-    def __init__(self, seed=42, demand=10):
+    def __init__(self, seed=42, demand=10, *, mixed_traffic=False):
         self.random = random.Random(seed)
+        self.mixed_traffic = mixed_traffic
         self.vehicles: list[Vehicle] = []
         self.time, self.sequence, self.next_id = 0.0, 0, 1
         self.demand = dict.fromkeys(DIRECTIONS, demand)
@@ -149,7 +193,15 @@ class TrafficWorld:
         return 'occupied' if any(self.in_conflict(v) for v in self.vehicles) else 'clear'
 
     def in_conflict(self, vehicle):
-        return vehicle.route.movement != 'left' and vehicle.committed and vehicle.distance < vehicle.route.exit_start + VEHICLE_LENGTH
+        length = vehicle.length if self.mixed_traffic else VEHICLE_LENGTH
+        return vehicle.route.movement != 'left' and vehicle.committed and vehicle.distance < vehicle.route.exit_start + length
+
+    def separation(self, a, b):
+        return (a.length+b.length)/2+GAP if self.mixed_traffic else VEHICLE_LENGTH+GAP
+
+    def shares_strip(self, a, b):
+        return (not self.mixed_traffic or a.changing_to or b.changing_to
+                or abs(a.lateral_offset-b.lateral_offset) < (a.width+b.width)/2+LATERAL_GAP-.00001)
 
     def spawn(self, direction, kind='car', distance=None, movement=None, lane=None):
         """API commands omit distance: all entries are at the rear boundary.
@@ -159,42 +211,48 @@ class TrafficWorld:
         if len(self.vehicles) >= 160:
             self.refused += 1
             return None
+        if kind not in BODY_DIMENSIONS:
+            raise ValueError('Unknown vehicle kind')
         explicit_movement = movement is not None
-        movement = movement or (self.random.choices(['left', 'straight', 'right'], [25, 55, 20])[0] if kind == 'car' else 'straight')
+        movement = movement or ('straight' if kind in EMERGENCY_KINDS else self.random.choices(['left', 'straight', 'right'], [25, 55, 20])[0])
         target_lane = MOVEMENT_LANE[movement]
         route_id = f'{direction}:{movement}:{target_lane}'
         route = ROUTES[route_id]
         progress = max(0.0, route.gate-distance) if distance is not None else 0.0
         initial_lanes = [lane] if lane else [target_lane] if explicit_movement or kind != 'car' else self.random.sample(list(LANES), len(LANES))
+        offsets = self.random.sample(list(MOTOR_OFFSETS), 3) if self.mixed_traffic and kind == 'motorcycle' else [0.0]
         for initial in initial_lanes:
             entry_lane = target_lane if progress >= CHANGE_END else initial
             entry = progress
             while entry >= 0:
-                vehicle = Vehicle(self.next_id, route_id, kind, entry, self.time, entry_lane)
-                point = vehicle.position()
-                if all(math.dist(point[:2], v.position()[:2]) >= VEHICLE_LENGTH+GAP for v in self.vehicles):
-                    vehicle.speed = self.random.uniform(44, 52)
-                    vehicle.change_after = self.random.uniform(CHANGE_START, CHANGE_START+80)
-                    self.next_id += 1
-                    self.vehicles.append(vehicle)
-                    if kind != 'car':
-                        self.record(f'{"Ambulans" if kind == "ambulance" else "Pemadam"} #{vehicle.id} masuk dari belakang pendekat {direction}.')
-                    return vehicle
-                entry -= VEHICLE_LENGTH+GAP
+                for offset in offsets:
+                    vehicle = Vehicle(self.next_id, route_id, kind, entry, self.time, entry_lane, lateral_offset=offset)
+                    point = vehicle.position()
+                    if all(not bodies_overlap(vehicle, point, v, v.position()) if self.mixed_traffic else math.dist(point[:2], v.position()[:2]) >= VEHICLE_LENGTH+GAP for v in self.vehicles):
+                        vehicle.speed = self.random.uniform(44, 52)
+                        vehicle.change_after = self.random.uniform(CHANGE_START, CHANGE_START+80)
+                        self.next_id += 1
+                        self.vehicles.append(vehicle)
+                        if kind in EMERGENCY_KINDS:
+                            self.record(f'{"Ambulans" if kind == "ambulance" else "Pemadam"} #{vehicle.id} masuk dari belakang pendekat {direction}.')
+                        return vehicle
+                entry -= BODY_DIMENSIONS[kind]['length']+GAP if self.mixed_traffic else VEHICLE_LENGTH+GAP
         self.refused += 1
         return None
 
     def candidates(self):
-        return sorted((v for v in self.vehicles if v.kind != 'car' and not v.served),
+        return sorted((v for v in self.vehicles if v.kind in EMERGENCY_KINDS and not v.served),
                       key=lambda v: (0 if v.kind == 'ambulance' else 1, max(0, v.route.gate-v.distance), v.born, v.id))
 
     def exit_available(self, vehicle):
         r = vehicle.route
         if self.blocked_exit == r.destination:
             return False
-        reserved = sum(1 for other in self.vehicles if other.id != vehicle.id and other.committed
+        reserved = sum((other.length+GAP if self.mixed_traffic else VEHICLE_LENGTH+GAP)
+                       for other in self.vehicles if other.id != vehicle.id and other.committed
                        and other.route.destination == r.destination and other.route.exit_lane == r.exit_lane)
-        return reserved < 16
+        required = vehicle.length+GAP if self.mixed_traffic else VEHICLE_LENGTH+GAP
+        return reserved+required <= 16*(VEHICLE_LENGTH+GAP)
 
     def prepare_changes(self):
         """Reserve a complete corridor, not just the gap at the starting point.
@@ -223,13 +281,13 @@ class TrafficWorld:
                 end = requester.distance+CHANGE_LENGTH
                 neighbors = [v for v in incoming if v.id != requester.id and lanes & v.occupied_lanes]
                 reservations = [v for v in neighbors if v.changing_to
-                    and v.distance-50 < end+VEHICLE_LENGTH+GAP
-                    and v.change_start+CHANGE_LENGTH+VEHICLE_LENGTH+GAP > requester.distance-50]
+                    and v.distance-50 < end+self.separation(requester, v)
+                    and v.change_start+CHANGE_LENGTH+self.separation(requester, v) > requester.distance-50]
                 front_clear = not reservations and all(
-                    v.distance-requester.distance >= CHANGE_LENGTH+VEHICLE_LENGTH+GAP+6
+                    v.distance-requester.distance >= CHANGE_LENGTH+self.separation(requester, v)+6
                     for v in neighbors if v.distance > requester.distance)
                 rear = [v for v in neighbors if target_lane in v.occupied_lanes
-                        and 0 <= requester.distance-v.distance < 50]
+                        and 0 <= requester.distance-v.distance < max(50, self.separation(requester, v)+6)]
                 if front_clear and not rear:
                     requester.changing_to = target_lane
                     requester.change_start = requester.distance
@@ -252,11 +310,13 @@ class TrafficWorld:
                 continue
             self.arrivals[direction] -= dt
             if self.arrivals[direction] <= 0:
-                self.spawn(direction)
+                kind = self.random.choices(ORDINARY_KINDS, ORDINARY_WEIGHTS)[0] if self.mixed_traffic else 'car'
+                self.spawn(direction, kind)
                 self.arrivals[direction] += max(.8, self.random.expovariate(self.demand[direction]/60))
         yielding = self.prepare_changes()
         ordered = sorted(self.vehicles, key=lambda v: (v.distance >= v.route.exit_start, v.committed, v.distance, -v.id), reverse=True)
-        positions = {v.id: v.position()[:2] for v in self.vehicles}
+        positions = {v.id: v.position() for v in self.vehicles}
+        identities = {v.id: v for v in self.vehicles}
         cells = {}
         def cell(p):
             return (math.floor(p[0]/68), math.floor(p[1]/68))
@@ -275,12 +335,15 @@ class TrafficWorld:
             if vehicle.changing_to:
                 target = min(target, vehicle.change_start+CHANGE_LENGTH)
             # A changing vehicle reserves both lanes; a follower cannot pass its tail.
-            if vehicle.distance < CHANGE_END+60:
+            if vehicle.distance < CHANGE_END+60 or self.mixed_traffic:
                 for other in ordered:
-                    if other.id != vehicle.id and other.route.origin == r.origin and other.distance > vehicle.distance and other.distance < CHANGE_END+100 and vehicle.occupied_lanes & other.occupied_lanes:
-                        gap = other.distance-vehicle.distance-VEHICLE_LENGTH-GAP
+                    shared_upstream = vehicle.distance < CHANGE_END+60 and other.distance < CHANGE_END+100 and vehicle.occupied_lanes & other.occupied_lanes
+                    same_route = self.mixed_traffic and other.route_id == vehicle.route_id
+                    if other.id != vehicle.id and other.route.origin == r.origin and other.distance > vehicle.distance and (shared_upstream or same_route) and self.shares_strip(vehicle, other):
+                        separation = self.separation(vehicle, other)
+                        gap = other.distance-vehicle.distance-separation
                         following_speed = max(0, gap*1.5)
-                        following_target = max(vehicle.distance, other.distance-VEHICLE_LENGTH-GAP)
+                        following_target = max(vehicle.distance, other.distance-separation)
                         limited = min(target, following_target, vehicle.distance+following_speed*dt)
                         if limited < target:
                             reason = 'following'
@@ -297,7 +360,8 @@ class TrafficWorld:
                 vehicle.request_since = None
                 self.record(f'Kendaraan #{vehicle.id}: celah pindah lajur tidak tersedia; mengikuti gerakan sah lajur sebelum percabangan.')
                 r = vehicle.route
-            gate = r.gate - VEHICLE_LENGTH/2
+            length = vehicle.length if self.mixed_traffic else VEHICLE_LENGTH
+            gate = r.gate - length/2
             if not vehicle.committed and target >= gate:
                 permitted = self.exit_available(vehicle)
                 if r.movement != 'left':
@@ -317,15 +381,37 @@ class TrafficWorld:
                         reason = 'conflict'
                     target = min(target, gate)
             if self.blocked_exit == r.destination:
-                if target > r.length-30:
+                exit_limit = r.length-max(30, length/2+GAP)
+                if target > exit_limit:
                     reason = 'exit_blocked'
-                target = min(target, r.length-30)
+                target = min(target, exit_limit)
             point = vehicle.position(target)
             cx, cy = cell(point)
-            neighbors = (identity for dx in (-1, 0, 1) for dy in (-1, 0, 1) for identity in cells.get((cx+dx, cy+dy), ()))
-            if any(identity != vehicle.id and swept_distance(positions[vehicle.id], point, positions[identity]) < VEHICLE_LENGTH+GAP-.00001 for identity in neighbors):
+            neighbors = {identity for dx in (-1, 0, 1) for dy in (-1, 0, 1) for identity in cells.get((cx+dx, cy+dy), ()) if identity != vehicle.id}
+            def unsafe(progress):
+                if not self.mixed_traffic:
+                    end_point = vehicle.position(progress)
+                    return any(swept_distance(positions[vehicle.id], end_point, positions[identity]) < VEHICLE_LENGTH+GAP-.00001 for identity in neighbors)
+                # Sample the actual curve and rotation within each bounded step,
+                # not just endpoint centres. No frontend layout drives physics.
+                for fraction in (.25, .5, .75, 1):
+                    pose = vehicle.position(vehicle.distance+(progress-vehicle.distance)*fraction)
+                    if any(bodies_overlap(vehicle, pose, identities[identity], positions[identity]) for identity in neighbors):
+                        return True
+                return False
+            if unsafe(target):
                 reason = 'safety_gap'
-                target = vehicle.distance
+                if self.mixed_traffic:
+                    low, high = vehicle.distance, target
+                    for _ in range(8):
+                        middle = (low+high)/2
+                        if unsafe(middle):
+                            high = middle
+                        else:
+                            low = middle
+                    target = low
+                else:
+                    target = vehicle.distance
             vehicle.stopped = target - vehicle.distance < .01
             vehicle.stop_reason = (reason or 'following') if vehicle.stopped else None
             vehicle.velocity = max(0, (target-vehicle.distance)/dt)
@@ -339,11 +425,11 @@ class TrafficWorld:
                 vehicle.change_after = vehicle.distance+CHANGE_GAP
                 vehicle.request_since = None
             cells[cell(positions[vehicle.id])].discard(vehicle.id)
-            positions[vehicle.id] = vehicle.position()[:2]
+            positions[vehicle.id] = vehicle.position()
             cells.setdefault(cell(positions[vehicle.id]), set()).add(vehicle.id)
-            if vehicle.distance > r.gate - VEHICLE_LENGTH/2 + .01:
+            if vehicle.distance > r.gate - length/2 + .01:
                 vehicle.committed = True
-            if vehicle.kind != 'car' and vehicle.committed and vehicle.distance >= r.exit_start + VEHICLE_LENGTH:
+            if vehicle.kind in EMERGENCY_KINDS and vehicle.committed and vehicle.distance >= r.exit_start + length:
                 if not vehicle.served:
                     self.record(f'EVP #{vehicle.id} sudah melewati area konflik.')
                 vehicle.served = True

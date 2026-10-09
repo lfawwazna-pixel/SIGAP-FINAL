@@ -244,6 +244,9 @@
         "kind": {
           "enum": [
             "car",
+            "motorcycle",
+            "bus",
+            "truck",
             "ambulance",
             "fire_engine"
           ],

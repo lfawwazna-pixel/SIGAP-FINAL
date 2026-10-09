@@ -1,7 +1,8 @@
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import { IntersectionMap } from './IntersectionMap'
-import { interpolatePose, schematicVehicleScales } from './VehicleLayer'
+import { interpolatePose } from './VehicleLayer'
+import { schematicVehicleLayout } from './schematicVehicleLayout'
 import { MapZoom } from './MapZoom'
 import { Monitor } from './Monitor'
 import { LoginScreen } from './LoginScreen'
@@ -126,25 +127,23 @@ it('changes map scale without sending controller commands and starts at 100 perc
   expect(vi.mocked(fetch).mock.calls.every(([, init]) => !init?.method)).toBe(true)
 })
 
-it('fits every crowded CCTV body without overlapping its neighbours or losing IDs', () => {
+it('extends a crowded CCTV road instead of shrinking or dropping its vehicles', () => {
   const vehicles = Array.from({ length: 180 }, (_, i) => ({ ...car, id: i+1, x: 510,
     y: 81-i*462/179, heading: 90 }))
-  const scales = schematicVehicleScales(vehicles)
   const view = render(<IntersectionMap {...props} schematic vehicles={vehicles} />)
   expect(view.container.querySelectorAll('.map-vehicle')).toHaveLength(180)
   expect(view.container.querySelectorAll('.vehicle-body rect')).toHaveLength(180)
-  for (let i = 1; i < vehicles.length; i++) {
-    // Include the 1.5-unit outline, not just distinct center coordinates.
-    const occupied = (26+1.5)*(scales.get(vehicles[i].id)!+scales.get(vehicles[i-1].id)!)/2
-    expect(Math.abs(vehicles[i].y-vehicles[i-1].y)).toBeGreaterThan(occupied)
-    expect(scales.get(vehicles[i].id)).toBeGreaterThan(0)
-  }
+  const map = view.container.querySelector('.intersection-map') as SVGSVGElement
+  const layout = schematicVehicleLayout(vehicles)
+  const span = 800 - 2 * layout.roadStart + 220
+  expect(map.getAttribute('viewBox')).toBe(`${layout.roadStart-110} ${layout.roadStart-110} ${span} ${span}`)
+  expect(parseFloat(map.style.width) / span).toBeCloseTo(100 / 1820)
+  expect(view.container.querySelector('.road')?.getAttribute('d')).toContain(`M270 ${layout.roadStart}`)
+  for (const body of view.container.querySelectorAll('.vehicle-body')) expect(body.getAttribute('transform')).toBeNull()
   expect(screen.getByLabelText('180 kendaraan pada peta')).toBeTruthy()
   expect(view.container.querySelector('.map-count')?.textContent).toBe('180 terlacak')
-  // A crowded approach must not shrink another lane/approach.
-  const separate = schematicVehicleScales([...vehicles, { ...car, id: 181, lane: 'inner' }, { ...car, id: 182, origin: 'T' }])
-  expect(separate.get(181)).toBe(1)
-  expect(separate.get(182)).toBe(1)
+  const drawn = layout.vehicles
+  for (let i = 1; i < drawn.length; i++) expect(drawn[i-1].y-drawn[i].y).toBeGreaterThan(28)
 })
 
 it('updates CCTV slots together without animating across a lane or a new arrival', async () => {
@@ -152,11 +151,11 @@ it('updates CCTV slots together without animating across a lane or a new arrival
   view.rerender(<IntersectionMap {...props} schematic vehicles={[
     { ...car, x: 430, y: 202, lane: 'inner' }, { ...car, id: 2, x: 430, y: 238, lane: 'inner' },
   ]} />)
-  expect(view.container.querySelector('[data-vehicle-id="1"]')?.parentElement?.getAttribute('transform')).toBe('translate(430 202)')
-  expect(view.container.querySelector('[data-vehicle-id="2"]')?.parentElement?.getAttribute('transform')).toBe('translate(430 238)')
+  expect(view.container.querySelector('[data-vehicle-id="1"]')?.parentElement?.getAttribute('transform')).toBe('translate(430 238)')
+  expect(view.container.querySelector('[data-vehicle-id="2"]')?.parentElement?.getAttribute('transform')).toBe('translate(430 202)')
   await flush(120)
   expect(view.container.querySelectorAll('.map-vehicle')).toHaveLength(2)
-  expect(view.container.querySelector('[data-vehicle-id="1"]')?.parentElement?.getAttribute('transform')).toBe('translate(430 202)')
+  expect(view.container.querySelector('[data-vehicle-id="1"]')?.parentElement?.getAttribute('transform')).toBe('translate(430 238)')
 })
 
 it('keeps emergency markers readable and lights above vehicles in the video map', () => {
@@ -168,4 +167,62 @@ it('keeps emergency markers readable and lights above vehicles in the video map'
   const layer = view.container.querySelector('.vehicle-layer')!
   const light = view.container.querySelector('[data-signal]')!
   expect(layer.compareDocumentPosition(light) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+})
+
+it('renders six detector classes as distinct glyphs with one stable map identity each', () => {
+  const kinds: TrafficView['vehicles'][number]['kind'][] = ['motorcycle','car','bus','truck','ambulance','fire_engine']
+  const vehicles = kinds.map((kind,i) => ({...car, id:i+1, kind, x:470, y:200-i*36, heading:90}))
+  const view = render(<IntersectionMap {...props} schematic vehicles={vehicles} />)
+  expect(view.container.querySelectorAll('.map-vehicle')).toHaveLength(6)
+  for (const [i,kind] of kinds.entries()) {
+    const glyph = view.container.querySelector(`[data-vehicle-id="${i+1}"]`)!
+    expect(glyph.querySelector(`.vehicle-glyph--${kind}`)).toBeTruthy()
+  }
+  expect(view.container.querySelector('.motorcycle-rider')).toBeTruthy()
+  expect(view.container.querySelector('.bus-windows')).toBeTruthy()
+  expect(view.container.querySelector('.truck-cargo')).toBeTruthy()
+  expect(view.container.querySelector('.ambulance-cross')).toBeTruthy()
+  expect(view.container.querySelector('.fire-ladder')).toBeTruthy()
+  expect(view.container.querySelector('.map-vehicle--motorcycle title')?.textContent).toContain('Motor terlacak')
+  expect(view.container.querySelector('.evp-number')).toBeNull()
+  const first = view.container.querySelector('[data-vehicle-id="1"]')
+  view.rerender(<IntersectionMap {...props} schematic vehicles={vehicles.map(v => v.id===1 ? {...v,kind:'truck'} : v)} />)
+  expect(view.container.querySelector('[data-vehicle-id="1"]')).toBe(first)
+  expect(first?.classList.contains('map-vehicle--truck')).toBe(true)
+})
+
+it('renders full length buses and trucks alongside the smaller motorcycle bodies', () => {
+  const kinds: TrafficView['vehicles'][number]['kind'][] = ['car','bus','truck','motorcycle']
+  const vehicles = kinds.map((kind,i) => ({...car,id:i+1,kind}))
+  const { container } = render(<IntersectionMap {...props} schematic vehicles={vehicles} />)
+  expect(container.querySelector('.vehicle-glyph--car rect')?.getAttribute('width')).toBe('26')
+  expect(container.querySelector('.vehicle-glyph--bus rect')?.getAttribute('width')).toBe('52')
+  expect(Number(container.querySelector('.truck-cargo')?.getAttribute('width')) + Number(container.querySelector('.truck-cab')?.getAttribute('width'))).toBe(52)
+  expect(container.querySelector('.vehicle-glyph--motorcycle rect')?.getAttribute('width')).toBe('14')
+})
+
+it('holds road extent during a run and preserves the current view when it expands', () => {
+  vi.spyOn(Element.prototype, 'getBoundingClientRect').mockImplementation(function(this: Element) {
+    const span = Number(this.getAttribute('viewBox')?.split(' ')[2] ?? 1820)
+    return { width: span / 1820 * 900 } as DOMRect
+  })
+  const show = (vehicles: TrafficView['vehicles'], run = 'a', schematic = true) => <div className="map-canvas"><IntersectionMap {...props} schematic={schematic} vehicleRunId={run} vehicles={vehicles} /></div>
+  const view = render(show([car]))
+  const canvas = view.container.querySelector('.map-canvas') as HTMLElement
+  const original = view.container.querySelector('svg')!.getAttribute('viewBox')
+  const centerBefore = 910 * 900 / 1820
+  const crowded = Array.from({length:100},(_,i) => ({...car,id:i+1}))
+  view.rerender(show(crowded))
+  const expanded = view.container.querySelector('svg')!.getAttribute('viewBox')!
+  const start = Number(expanded.split(' ')[0])
+  expect(expanded).not.toBe(original)
+  expect((400-start) * 900 / 1820 - canvas.scrollLeft).toBeCloseTo(centerBefore)
+  expect(canvas.scrollTop).toBe(canvas.scrollLeft)
+  view.rerender(show([car]))
+  expect(view.container.querySelector('svg')!.getAttribute('viewBox')).toBe(expanded)
+  view.rerender(show([car], 'b'))
+  expect(view.container.querySelector('svg')!.getAttribute('viewBox')).toBe(original)
+  expect(canvas.scrollLeft).toBeCloseTo(0)
+  view.rerender(show(crowded, 'b', false))
+  expect(view.container.querySelector('svg')!.getAttribute('viewBox')).toBe(original)
 })

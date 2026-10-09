@@ -150,3 +150,30 @@ def test_control_proxy_rejects_wrong_intersection_and_invalid_receipt(connected)
     app.state.atcs_client = httpx.AsyncClient(base_url='http://atcs', transport=httpx.MockTransport(lambda request: httpx.Response(200, json=snapshot)))
     assert client.get('/api/control').status_code == 503
     assert client.get('/api/control/receipts/'+str(uuid4())).status_code == 503
+
+
+def test_operator_release_immediately_clears_video_evp_evidence(connected, clock):
+    client, app, atcs, _ = connected
+    view = login(client).json()
+    headers = {**ORIGIN, 'X-CSRF-Token': view['csrf_token']}
+    atcs.post('/control/commands', headers={'Authorization': f'Bearer {KEY}'},
+              json=observation(atcs.get('/control').json(), clock.utcnow()))
+    assert client.post('/api/control/commands', headers=headers,
+                       json=operator_request(client)).json()['outcome'] == 'accepted'
+    adaptive = app.state.adaptive
+    adaptive.video_mode = True
+    adaptive.control_owned = True
+    adaptive.priority_session = uuid4()
+    adaptive.priority_sent = adaptive.emergency_serving = True
+    adaptive.emergency.records['prior-session'] = {'hits': 3}
+    adaptive.emergency.events.append('Prioritas EVP sebelumnya')
+    adaptive.video.vision.focus = True
+    response = client.post('/api/control/commands', headers=headers,
+                           json=operator_request(client, 'release'))
+    assert response.status_code == 200 and response.json()['outcome'] == 'accepted'
+    assert client.get('/api/control').json()['state'] == 'returning_atcs'
+    assert not adaptive.control_owned and adaptive.priority_session is None
+    assert not adaptive.priority_sent and not adaptive.emergency_serving
+    assert not adaptive.emergency.records and not adaptive.emergency.events
+    assert adaptive.emergency.snapshot().state == 'idle'
+    assert not adaptive.video.vision.focus

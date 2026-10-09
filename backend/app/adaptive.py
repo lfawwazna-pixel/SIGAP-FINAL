@@ -56,6 +56,14 @@ class AdaptiveSender:
             self.emergency.update(self.video, control_active=bool(self.control_owned
                 and not self.held and self.fault == 'none'))
 
+    def suspend_emergency(self):
+        self.control_owned = False
+        self.priority_session = None
+        self.priority_sent = self.emergency_serving = False
+        self.emergency.suspend()
+        if self.video is not None:
+            self.video.vision.focus = False
+
     async def start(self, client):
         self.client = client
         if self.enabled:
@@ -89,7 +97,7 @@ class AdaptiveSender:
     async def hold(self):
         async with self.lock:
             self.auto_resume, self.held = False, True
-            self.control_owned = False
+            self.suspend_emergency()
             # Stop renewing control even if the release cannot be delivered.
             # ATCS then expires the heartbeat independently.
             try:
@@ -102,7 +110,7 @@ class AdaptiveSender:
 
     async def _cycle(self):
         if self.fault == 'sender_stopped':
-            self.control_owned = False
+            self.suspend_emergency()
             self.state, self.message = 'unavailable', 'Uji pengirim berhenti: heartbeat dan pengamatan dihentikan.'
             self.batch = self.preview = None
             if self.video is not None:
@@ -153,7 +161,14 @@ class AdaptiveSender:
             raise ValueError(receipt.message)
         r = await self.client.get('/control'); r.raise_for_status()
         status = ControlStatus.model_validate(r.json())
-        self.control_owned = bool(status.session_id and status.sender_id == self.sender and not self.held)
+        self.control_owned = bool(status.state == 'adaptive' and status.controller == 'SIGAP'
+            and status.session_id and status.sender_id == self.sender and not self.held and self.fault == 'none')
+        if not self.control_owned:
+            self.suspend_emergency()
+        elif self.priority_session != status.session_id:
+            # A newly acquired session must confirm fresh evidence of its own.
+            self.emergency.suspend()
+            self.priority_session, self.priority_sent = status.session_id, False
         now, at = time.monotonic()-self.started, datetime.now(timezone.utc)
         if status.active_request_id and status.active_request_id != self.applied:
             decision = next((d for d in self.decisions if d.request_id == status.active_request_id), None)
@@ -168,12 +183,12 @@ class AdaptiveSender:
         self.state = 'active' if status.state == 'adaptive' and status.sender_id == self.sender else 'ready' if status.ready else 'unavailable'
         self.message = ('SIGAP mengambil alih kendali berdasarkan YOLO + ByteTrack.' if self.state == 'active'
             else 'Empat pendekat siap; aktifkan kendali SIGAP.' if self.video_mode else 'Adaptif menggunakan data buatan; bukan deteksi video.') if status.ready else status.readiness_reason
-        target = self.emergency.update(self.video, control_active=bool(status.session_id and status.sender_id == self.sender and not self.held)).target if self.video_mode else None
-        self.emergency_serving = status.emergency_serving
+        target = self.emergency.update(self.video, control_active=self.control_owned).target if self.video_mode else None
+        self.emergency_serving = self.control_owned and status.emergency_serving
         if self.emergency.state == 'recovering' and not status.emergency and not status.emergency_serving and status.state == 'fixed_time':
             self.emergency.recovered()
         if self.video is not None:
-            self.video.vision.focus = bool(target and status.session_id and status.sender_id == self.sender and not self.held)
+            self.video.vision.focus = bool(target and self.control_owned)
         if self.held:
             return
         if self.video_mode and self.auto_resume and status.ready and status.state == 'fixed_time' and status.sender_id == self.sender:
@@ -182,9 +197,7 @@ class AdaptiveSender:
         if status.sender_id != self.sender or not status.session_id:
             return  # First acquisition requires operator activation; video recovery may resume.
         await self.command(status, 'heartbeat', session_id=status.session_id)
-        if self.priority_session != status.session_id:
-            self.priority_session, self.priority_sent = status.session_id, False
-        if self.video_mode and (target is not None or self.priority_sent or status.emergency is not None):
+        if self.video_mode and self.control_owned and (target is not None or self.priority_sent or status.emergency is not None):
             receipt = await self.command(status, 'priority', session_id=status.session_id, priority_target=target)
             if receipt.outcome == 'rejected':
                 raise ValueError(receipt.message)
@@ -225,7 +238,7 @@ class AdaptiveSender:
             except asyncio.CancelledError:
                 raise
             except Exception:
-                self.control_owned = False
+                self.suspend_emergency()
                 # Do not manufacture fresh measurements on errors. ATCS owns the timeout.
                 self.state, self.message = 'unavailable', 'Pengukuran atau komunikasi adaptif terputus. ATCS memantau fallback.'
                 self.batch = self.preview = None

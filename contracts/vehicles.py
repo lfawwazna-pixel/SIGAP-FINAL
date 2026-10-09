@@ -8,7 +8,7 @@ class VehicleView(Contract):
     id: int = Field(ge=1)
     origin: Direction
     movement: Literal['left', 'straight', 'right']
-    kind: Literal['car', 'ambulance', 'fire_engine']
+    kind: Literal['car', 'motorcycle', 'bus', 'truck', 'ambulance', 'fire_engine']
     x: float = Field(ge=-420, le=1220, allow_inf_nan=False)
     y: float = Field(ge=-420, le=1220, allow_inf_nan=False)
     heading: float = Field(ge=-180, le=180, allow_inf_nan=False)

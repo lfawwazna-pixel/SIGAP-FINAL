@@ -5,12 +5,51 @@ import type { AnalyticsView } from './types/AnalyticsView'
 import { AnalyticsPage, impactChange, validReport } from './AnalyticsPage'
 import { AnalyticsChart } from './AnalyticsChart'
 import { App } from './App'
+import { directions } from './traffic'
 import { respond, sessionFixture } from './testFixtures'
 
 const data = () => structuredClone(fixture) as unknown as AnalyticsView
 const session = () => { const s = sessionFixture(); s.operator.permissions.push('control:operate'); return s }
 const page = () => <AnalyticsPage session={session()} onLogout={() => undefined} signingOut={false} logoutError={null} />
 afterEach(() => { cleanup(); vi.unstubAllGlobals(); vi.restoreAllMocks(); window.history.replaceState(null, '', '/') })
+
+it('uses the repeated mean in cards and the first seed only in the graph', async () => {
+  const view = data(), report = view.latest_comparison!
+  vi.stubGlobal('fetch', vi.fn(() => respond(view))); render(page())
+  await screen.findByRole('img', { name: /Perbandingan Waktu tunggu/ })
+  const card = screen.getByRole('heading', { name: 'Tunggu rata-rata' }).parentElement!
+  const mean = report.metrics.find(m => m.key === 'average_wait_seconds')!.sigap_mean
+  expect(card.querySelector('strong')!.textContent).toContain(new Intl.NumberFormat('id-ID', { maximumFractionDigits: 1 }).format(mean))
+  expect(screen.getByText(/contoh pasangan pertama, bukan rata-rata ulangan/)).toBeTruthy()
+  expect(within(screen.getByRole('table', { name: 'Hasil per pendekat' })).getAllByRole('row').length).toBe(5)
+})
+
+it('freezes zone fingerprint and sends observed class demand without lamp commands', async () => {
+  const view = data(); view.latest_comparison = null
+  view.zone_demand = { ready: true, generated_at: view.generated_at, message: 'Profil siap', fingerprint: 'zone-profile-123',
+    approaches: directions.map(direction => ({ direction, state: 'ready', message: 'Siap', source: 'recording', observed_seconds: 60, entries: 3, demand_per_minute: 3,
+      by_class: { motorcycle: 2, car: 1, bus: 0, truck: 0 }, by_movement: { left: 1, straight: 2, right: 0 }, queue_visibility: 'partial', loop_count: 1 })) }
+  const fetcher = vi.fn((_url: string, options?: RequestInit) => respond(options?.method === 'POST' ? fixture.latest_comparison : view))
+  vi.stubGlobal('fetch', fetcher); render(page()); await screen.findByText('Profil siap')
+  fireEvent.click(screen.getByRole('button', { name: 'Gunakan pengamatan zona' }))
+  expect((screen.getByLabelText('Arus Utara (kend/menit)') as HTMLInputElement).disabled).toBe(true)
+  fireEvent.click(screen.getByRole('button', { name: /Jalankan perbandingan setara/ }))
+  await screen.findByText('Perbandingan selesai dan tersimpan. Lihat hasil di bawah.')
+  const input = JSON.parse(String(fetcher.mock.calls.find(c => c[1]?.method === 'POST')![1]!.body))
+  expect(input.observation_fingerprint).toBe('zone-profile-123')
+  expect(input.demand_source).toBe('zone_observation')
+  expect(input.class_mix).toEqual({ motorcycle: 8, car: 4, bus: 0, truck: 0 })
+  expect(input.demand_per_minute).toEqual({ U: 3, T: 3, S: 3, B: 3 })
+})
+
+it('marks an interval spanning zero as inconclusive and withholds observation without a ready profile', async () => {
+  const view = data(), metric = view.latest_comparison!.metrics.find(m => m.key === 'average_wait_seconds')!
+  metric.lower_95 = -500; metric.upper_95 = 500; metric.result = 'inconclusive'
+  vi.stubGlobal('fetch', vi.fn(() => respond(view))); render(page())
+  await screen.findByRole('img', { name: /Perbandingan Waktu tunggu/ })
+  expect(within(screen.getByRole('heading', { name: 'Tunggu rata-rata' }).parentElement!).getByText(/Belum konsisten antarulangan/)).toBeTruthy()
+  expect((screen.getByRole('button', { name: 'Gunakan pengamatan zona' }) as HTMLButtonElement).disabled).toBe(true)
+})
 
 it('keeps real data unconfigured and forecasts empty rather than inventing traffic', async () => {
   const view = data(); view.latest_comparison = null
@@ -54,8 +93,10 @@ it('does not hide regressions or compute a percentage against zero', async () =>
   expect(impactChange(100, 120)).toBe(-20)
   expect(impactChange(100, 120, true)).toBe(20)
   expect(impactChange(0, 20)).toBeNull()
-  const view = data(), a = view.latest_comparison!.atcs.at(-1)!, b = view.latest_comparison!.sigap.at(-1)!
-  b.average_wait_seconds = a.average_wait_seconds * 2
+  const view = data(), m = view.latest_comparison!.metrics.find(m => m.key === 'average_wait_seconds')!
+  m.sigap_mean = m.atcs_mean * 2
+  m.improvement_mean = -m.atcs_mean; m.improvement_percent = -100
+  m.lower_95 = -m.atcs_mean - 1; m.upper_95 = -m.atcs_mean + 1; m.result = 'worse'
   vi.stubGlobal('fetch', vi.fn(() => respond(view))); render(page())
   const badge = await screen.findByText('100% lebih tinggi dari ATCS')
   expect(badge.className).toBe('delta-bad')
@@ -73,7 +114,7 @@ it('rejects invalid scenario bounds before a request is sent', async () => {
   const view = data(); view.latest_comparison = null
   const fetcher = vi.fn(() => respond(view)); vi.stubGlobal('fetch', fetcher)
   render(page()); await screen.findByText('API key TomTom belum dikonfigurasi pada backend.')
-  fireEvent.change(screen.getByLabelText('Arus Utara (kend/menit)'), { target: { value: '61' } })
+  fireEvent.change(screen.getByLabelText('Arus Utara (kend/menit)'), { target: { value: '181' } })
   fireEvent.click(screen.getByRole('button', { name: /Jalankan perbandingan setara/ }))
   expect(screen.getByText(/Periksa batas angka pada skenario/)).toBeTruthy()
   expect(fetcher.mock.calls.length).toBe(1)

@@ -237,6 +237,8 @@ class ControlSupervisor:
         self.observation_sequence = command.sequence
 
     def priority(self, command, now, at):
+        if self.state != 'adaptive':
+            raise Rejected('EVP_CONTROL_INACTIVE', 'Prioritas EVP memerlukan kendali SIGAP yang sudah aktif.')
         target = command.priority_target
         if target is None:
             if self.emergency is None:

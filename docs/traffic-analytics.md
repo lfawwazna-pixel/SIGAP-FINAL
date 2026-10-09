@@ -33,33 +33,59 @@ Bagian akhir riwayat menjadi holdout kronologis. Model dilatih hanya pada bagian
 
 Area prediksi adalah rentang heuristik dari galat yang melebar seiring horizon, **bukan interval keyakinan 95%**. Model statistik ini belum tervalidasi lapangan dan belum mengandung pola harian, cuaca, acara, atau insiden. Sampel kedaluwarsa/tidak layak dan error pengambilan menahan prediksi.
 
-## Perbandingan ATCS–SIGAP
+## Perbandingan ATCS–SIGAP · queue-v2
 
-Tombol **Jalankan perbandingan setara** membuat satu jadwal kedatangan Poisson dan pilihan belok dari seed. Kedua kendali memakai **jadwal yang persis sama**, durasi uji, antrean awal kosong, headway pelayanan, kuning, semua-merah, dan keluaran diasumsikan lancar. Hash jadwal disimpan agar pengulangan dapat diperiksa. Eksperimen terpisah dari aplikasi/ATCS; tidak mengirim perintah lampu atau mengaktifkan GPU.
+Eksperimen ini **terpisah dari kendali operasional**. Tombol tidak mengaktifkan SIGAP, mengirim perintah lampu atau menjalankan GPU. Tracking, zona, map ATCS dan simulasi kendaraan tidak diubah. Grafik TomTom tetap konteks ruas pada waktu pengambilan, bukan masukan jumlah kendaraan atau bukti manfaat kendali.
 
-Model FIFO per pendekat/pergerakan berjalan per 1 detik, dengan hasil tiap 15 detik. Belok kiri memakai ruas pintas yang diasumsikan lancar. ATCS memakai waktu dasar di konfigurasi simpang. SIGAP memakai implementasi `AdaptivePolicy` dan konfigurasi kebijakan proyek, dengan batas hijau video 180 detik serta perlindungan pandangan sebagian dan penurunan bertahap. Parameter kebijakan, baseline, dan transisi ikut disimpan dalam laporan/CSV.
+### Masukan zona dan skenario manual
 
-Fraksi deteksi hanya mengurangi hitungan yang diberikan ke kebijakan; waktu tunggu tertua diasumsikan diketahui dari model. Ini keterbatasan penting, bukan estimasi recall model YOLO sebenarnya. Gerakan ruang, output terblokir, kalibrasi kamera, kelas armada, dan occlusion dinamis belum dimodelkan. Ubah seed/arus/durasi/cakupan untuk menilai sensitivitas. Hasil dapat lebih baik, sama, atau lebih buruk; tidak ada persentase penghematan yang dipaksakan. Baseline observasi 6–7 menit dari rencana belum menjadi data validasi eksperimen ini.
+Panel **Gunakan pengamatan zona** memerlukan keempat kamera berjalan, kalibrasi tidak ambigu dan tracking mutakhir berkelanjutan minimal 60 detik. Jendela maksimum 180 detik; jeda lebih dari 3 detik memulai jendela baru. Gunakan titik bawah-tengah bounding box dan aturan admission zona yang sama dengan dashboard. Satu ID baru yang teramati sebelum garis henti dihitung sekali; kendaraan kiri bebas berasal dari zona outer. Kendaraan pada frame awal setiap tracker session tidak dianggap kedatangan baru. ID coasted, kendaraan di luar zona, yang sudah melewati garis henti terkontrol, dan EVP dikecualikan. Rekaman looping ditandai dan populasi frame pertama loop tidak dihitung sebagai kedatangan.
 
-Indikator:
+Laju per arah = identitas biasa baru / detik pengamatan × 60. Campuran kelas dan belokan mengikuti zona outer/middle/inner, bukan tujuan perjalanan yang telah diverifikasi lapangan. Backend membekukan fingerprint profil dan memverifikasi sumber serta kalibrasi; token berlaku maksimal 10 menit. Backend mengganti angka laju/kelas/belokan dari klien dengan profil tersimpan. Profil kosong yang valid menghasilkan nol, bukan arus default. Laju >180 kendaraan/menit ditolak sebagai di luar batas model, tidak dipotong diam-diam.
 
-| Faktor | Perhitungan dan batasnya |
+Profil adalah **kedatangan teramati dalam zona**, bukan arus sebenarnya: ID switch, occlusion, kendaraan sudah berada di zona saat frame awal, dan pemotongan arus oleh ROI dapat menimbulkan bias. Rekaman berulang bukan sampel lapangan independen. Belum cukup untuk klaim akurasi arus. Skenario manual tetap tersedia tanpa tracking/TomTom; preset ringan merata, tidak seimbang dan padat adalah asumsi uji yang dapat diedit. Tidak ada preset yang dijamin memberi keuntungan.
+
+### Rancangan berpasangan
+
+Default 10 pasangan seed berturut-turut (rentang 5–30), warmup 300 detik (0–900), pengamatan 900 detik (300–1800). Jadwal Poisson mencakup warmup + pengamatan. Setiap pasangan memakai **identitas, waktu kedatangan, kelas, asal, belokan dan observation mark yang identik**. Hash jadwal aktual disimpan per seed; fraksi deteksi tidak mengubah kendaraan sebenarnya. Ulangan tidak dipilih berdasarkan hasil. Kendaraan awal setiap strategi setelah warmup bisa berbeda karena kebijakan berbeda; kedatangan selama warmup tetap sama. Jumlah peserta dan antrean awal kedua strategi dilaporkan agar perbedaan ini terbuka.
+
+ATCS baseline memakai hijau U/T/S/B **85/150/95/100 detik**, kuning 3, semua merah 2 dari **Tabel 7 penelitian Polban (2025)**. Urutan U–T–S–B adalah desain proyek. Studi memakai data Dishub 2023 yang diproyeksikan; konfigurasi ATCS terkini belum dikonfirmasi. Baseline ini bukan pembuktian bahwa semua ATCS memakai waktu tetap. Sumber: [penelitian simpang yang sama](https://jurnal.polban.ac.id/proceeding/article/view/6701/4025).
+
+SIGAP menjalankan `AdaptivePolicy` yang dipakai aplikasi, baseline yang sama, maksimum hijau dari pengaturan ATCS lokal (default 180 detik), serta guard video/pandangan sebagian dan penurunan bertahap. Tidak ada algoritme khusus analitik untuk membuat SIGAP menang. Fraksi deteksi default 1 berarti seluruh identitas **skenario** terlihat; ini bukan klaim recall YOLO 100%. Jika sensitivitas diturunkan, identitas tak terlihat tidak menyumbang count atau waktu tunggu tertua. Cakupan penuh/sebagian terpisah dari fraksi deteksi; default sebagian.
+
+### Waktu, pelayanan dan ruang
+
+Mesin antrean memakai **kejadian dengan waktu pecahan tepat**, bukan pembulatan per detik. Integral antrean memakai keadaan sebelum event, termasuk sebelum keberangkatan. Startup default 2 detik dan headway mobil 2,2 detik adalah asumsi yang dapat dikalibrasi, mengacu konsep [FHWA Signal Timing Manual, Chapter 3](https://ops.fhwa.dot.gov/publications/fhwahop08024/chapter3.htm). Model bukan simulasi mikro seluruh gerak peta.
+
+Satu antrean FIFO per pergerakan/arah. Motor berturut-turut berbagi hingga 3 posisi dalam satu baris, tanpa melewati mobil. Bus/truk default ruang dan headway 2× mobil. Ruang baris mobil default 6,5 m, motor 3 m. Angka ini asumsi, bukan ukuran terkalibrasi di video. Kiri bebas diasumsikan keluar setelah headway tanpa konflik. Model belum memperhitungkan percepatan, konflik geometris, kapasitas keluaran jaringan, spillback, perubahan lajur atau EVP; pergantian lampu tetap melalui kuning dan semua merah.
+
+### Rumus dan interpretasi
+
+| Indikator | Rumus / makna |
 | --- | --- |
-| Waktu tunggu | Akumulasi vehicle-seconds antrean / semua kedatangan, termasuk yang belum terlayani; menghindari bias hanya kendaraan yang selesai. |
-| Antrean | Kendaraan yang masih mengantre, gabungan empat pendekat. |
-| Panjang antrean | Total kendaraan antre × asumsi jarak/veh; bukan panjang satu lajur atau meter kalibrasi video. |
-| BBM idle | Vehicle-seconds / 3600 × liter per kendaraan per jam. Tidak mencakup akselerasi/perjalanan. |
-| CO₂ | Estimasi BBM idle × faktor kg/L; default setara bensin, bukan seluruh campuran armada. |
-| Biaya BBM | Estimasi idle × harga asumsi, bukan harga pasar saat ini. |
-| Biaya waktu | Vehicle-seconds / 3600 × nilai waktu per kendaraan per jam. |
-| Pelayanan | Kendaraan kumulatif keluar antrean pada jendela uji; belum menjadi throughput lapangan. |
-| Darurat/keselamatan | Belum dievaluasi; perlu klip terverifikasi dan pengujian EVP/transisi tersendiri. |
+| Vehicle-seconds `W` | Integral jumlah kendaraan dalam antrean terhadap waktu, terpisah per kelas dan arah. Waktu sebelum warmup dikecualikan. |
+| Peserta `N` | Antrean awal + kedatangan dalam jendela pengamatan. |
+| Tunggu rata-rata terbatas | `W/N`; 0 jika N=0. Kendaraan belum selesai ikut. Ini bukan waktu tunggu penuh hingga semua kendaraan selesai, dan bukan seluruh control delay HCM (yang juga mencakup akselerasi/deselerasi). |
+| Tunggu kendaraan selesai | Waktu terakumulasi dalam jendela per kendaraan yang selesai; tersedia pada hasil mentah, tidak menjadi kartu utama karena bias terhadap peserta yang cepat terlayani. |
+| Konservasi | `antrean + terlayani = antrean awal + kedatangan`, pada setiap sampel dan ulangan. |
+| Panjang antrean | Σ ruang baris dari semua lajur; motor dalam satu baris tidak menambah panjang sebanyak jumlah motor. Maksimum panjang satu lajur dilaporkan terpisah. Tidak dibatasi panjang map dan bukan ukuran kamera. |
+| BBM | Σ `(W_k/3600 × idle_k L/jam)`; hanya antrean/idle. |
+| CO₂ | Σ `liter_k × faktor bahan bakar_k`. |
+| Biaya BBM | Σ `liter_k × harga bahan bakar_k`. |
+| Biaya waktu | `W/3600 × nilai waktu per kendaraan-jam`; tidak mengasumsikan jumlah penumpang. |
+| Biaya total | Biaya BBM + biaya waktu; biaya non-idle tidak dihitung. |
 
-Asumsi default dapat diedit: idle 0,8 L/jam/veh; CO₂ 2,35 kg/L; BBM Rp10.000/L; nilai waktu Rp20.000/veh/jam; jarak 6,5 m/veh. Semua merupakan **asumsi**, bukan angka hasil pengukuran. Faktor CO₂ dibulatkan dari [EPA: 8.887 gram per US gallon bensin](https://www.epa.gov/greenvehicles/greenhouse-gas-emissions-typical-passenger-vehicle) / 3,785411784 L ≈2,35 kg/L. Idle armada, harga, dan nilai waktu harus diganti dengan sumber lokal sebelum dipakai untuk klaim evaluasi.
+Referensi idle [DOE AFDC PREP, Table 5](https://afdc.energy.gov/prep/prep_methodology.html): mobil bensin 0,23 US gal/jam ≈0,871 L/jam; kendaraan diesel berat 0,8 US gal/jam ≈3,028 L/jam. Pemakaian nilai kendaraan berat untuk bus/truk adalah asumsi. Motor default 0,2 L/jam adalah asumsi proyek tanpa kalibrasi lokal. Profil tiap kelas (ruang, headway, idle, bahan bakar, motor sejajar) dapat diedit. Faktor CO₂ dibulatkan dari [EPA](https://www.epa.gov/energy/greenhouse-gas-equivalencies-calculator-calculations-and-references) menjadi 2,35 kg/L bensin dan 2,69 kg/L diesel. YOLO tidak mengidentifikasi bahan bakar; pemetaan kelas ke bahan bakar juga asumsi. Harga bensin/diesel default Rp10.000/L dan nilai waktu Rp20.000/kendaraan-jam adalah asumsi eksperimen, bukan harga terkini. Semua faktor disimpan dalam laporan/CSV.
+
+Kartu memakai **rata-rata seluruh ulangan**. Grafik memperlihatkan pasangan **seed pertama**, berlabel demikian; bukan rata-rata seluruh seed. Tabel per arah menunjukkan tunggu, terlayani, tersisa dan peserta, agar perburukan pada arah tertentu tidak tersembunyi. Tidak ada persen jika baseline nol.
+
+Untuk setiap indikator, `d_i = ATCS_i − SIGAP_i`; untuk pelayanan, arah dibalik (`SIGAP_i − ATCS_i`). Interval berpasangan 95% = `mean(d) ± t_(n−1, 0,975) × s_d/√n`. Persen = `mean(d)/mean(ATCS) × 100`; bukan rata-rata persentase. Interval positif = lebih baik pada skenario ini, negatif = lebih buruk, melintasi nol = belum konsisten antarulangan, semua nol = sama. Interval hanya variasi seed skenario, **bukan ketidakpastian keseluruhan model atau manfaat lapangan**. Prinsip evaluasi kondisi setara dan ketergantungan terhadap baseline: [FHWA Evaluating Adaptive Signal Control, Chapter 3](https://ops.fhwa.dot.gov/publications/fhwahop13031/chap3.htm).
+
+Arsip metode lama tetap dapat dibaca dengan label “metode sebelumnya”; tidak diubah seolah memakai armada campuran atau banyak ulangan. Jalankan ulang untuk mendapat queue-v2. Ekspor menyertakan metode, input lengkap, provenance profil, sumber, asumsi, konfigurasi, hash, seluruh hasil akhir ulangan, ringkasan interval dan grafik seed pertama. Hasil keselamatan/respons EVP tetap `not_evaluated` pada eksperimen dampak ini.
 
 ## Endpoint dan validasi
 
-- `GET /api/analytics`: pengamatan cache, kualitas, prediksi, laporan terakhir; login wajib.
+- `GET /api/analytics`: pengamatan cache, kualitas, prediksi, profil zona, laporan terakhir; login wajib.
 - `POST /api/analytics/comparison`: input terbatasi; login, izin `control:operate`, Origin terpercaya, `X-SIGAP-Request`, dan CSRF wajib.
 - `GET /api/analytics/comparison/{id}/csv`: metadata/parameter/hash dan kedua deret; login wajib.
 
